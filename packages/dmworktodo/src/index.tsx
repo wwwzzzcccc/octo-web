@@ -10,6 +10,9 @@ export { default as TodoPage } from './pages/TodoPage';
 export { default as TodoStatusBadge } from './ui/TodoStatusBadge';
 export { default as TodoCard } from './ui/TodoCard';
 export { default as TodoFilterBar } from './ui/TodoFilterBar';
+export { default as MemberPicker } from './ui/MemberPicker';
+export { default as DetailPanel } from './ui/DetailPanel';
+export { default as CreateTaskModal } from './ui/CreateTaskModal';
 
 // Chat Integration
 export { default as ChatTodoPanel } from './panel/ChatTodoPanel';

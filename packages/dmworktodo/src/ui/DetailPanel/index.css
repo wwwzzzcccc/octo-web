@@ -1,0 +1,86 @@
+/* ─── DetailPanel 样式 ────────────────────────────────── */
+
+/* 任务名编辑输入框 */
+.wk-detail-panel__title-input {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--wk-text-primary);
+  margin: 0 0 var(--wk-sp-2);
+  line-height: 1.4;
+  padding: 4px 8px;
+  border: 1px solid var(--wk-brand-primary, #7C5CFC);
+  border-radius: 4px;
+  background: var(--wk-bg-surface);
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 可点击的标题（进入编辑模式） */
+.wk-detail-panel__title-clickable {
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 4px;
+  transition: background 150ms;
+}
+
+.wk-detail-panel__title-clickable:hover {
+  background: var(--wk-bg-item-hover, rgba(0, 0, 0, 0.03));
+}
+
+/* 提醒时间按钮组 */
+.wk-detail-panel__remind-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--wk-border-default, #e5e5e5);
+  border-radius: 6px;
+  background: var(--wk-bg-surface, #fff);
+  color: var(--wk-text-primary, #1a1a1a);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms;
+  white-space: nowrap;
+}
+
+.wk-detail-panel__remind-btn:hover:not(:disabled) {
+  background: var(--wk-bg-item-hover, rgba(0, 0, 0, 0.03));
+  border-color: var(--wk-brand-primary, #7C5CFC);
+}
+
+.wk-detail-panel__remind-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wk-detail-panel__remind-btn--active {
+  background: var(--wk-brand-primary, #7C5CFC);
+  color: #fff;
+  border-color: var(--wk-brand-primary, #7C5CFC);
+}
+
+.wk-detail-panel__remind-btn--active:hover {
+  background: var(--wk-brand-primary, #7C5CFC);
+  opacity: 0.9;
+}
+
+/* 来源频道跳转按钮 */
+.wk-detail-panel__channel-btn {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--wk-border-default, #e5e5e5);
+  border-radius: 6px;
+  background: var(--wk-bg-surface, #fff);
+  color: var(--wk-brand-primary, #7C5CFC);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms;
+  text-align: left;
+}
+
+.wk-detail-panel__channel-btn:hover {
+  background: var(--wk-brand-tint-03, rgba(124, 92, 252, 0.03));
+  border-color: var(--wk-brand-primary, #7C5CFC);
+}
