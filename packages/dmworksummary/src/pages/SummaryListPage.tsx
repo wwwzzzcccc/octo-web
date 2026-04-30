@@ -60,12 +60,10 @@ export default class SummaryListPage extends Component<{}, SummaryListPageState>
     private batchPollTimer: ReturnType<typeof setInterval> | null = null;
     private isBatchPolling = false;
 
-    private handleStatusChange_ = () => this.loadData();
     private handleSpaceChanged_ = () => this.loadData();
 
     componentDidMount() {
         this.loadData();
-        window.addEventListener("summary-status-change", this.handleStatusChange_);
         WKApp.mittBus.on("summary-space-changed", this.handleSpaceChanged_);
     }
 
@@ -73,7 +71,6 @@ export default class SummaryListPage extends Component<{}, SummaryListPageState>
         window.dispatchEvent(new CustomEvent("summary-list-unmount"));
         if (this.searchTimer) clearTimeout(this.searchTimer);
         this.stopBatchPoll();
-        window.removeEventListener("summary-status-change", this.handleStatusChange_);
         WKApp.mittBus.off("summary-space-changed", this.handleSpaceChanged_);
     }
 
@@ -115,7 +112,20 @@ export default class SummaryListPage extends Component<{}, SummaryListPageState>
         }
 
         this.stopBatchPoll();
-        this.batchPollTimer = setInterval(() => this.doBatchPoll(activeIds), 5000);
+        this.batchPollTimer = setInterval(() => {
+            const currentActiveIds = this.state.items
+                .filter(item =>
+                    item.status === TaskStatus.PENDING ||
+                    item.status === TaskStatus.WAITING_CONFIRM ||
+                    item.status === TaskStatus.PROCESSING
+                )
+                .map(item => item.task_id);
+            if (currentActiveIds.length === 0) {
+                this.stopBatchPoll();
+                return;
+            }
+            this.doBatchPoll(currentActiveIds);
+        }, 5000);
     }
 
     private async doBatchPoll(taskIds: number[]) {

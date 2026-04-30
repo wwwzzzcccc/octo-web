@@ -224,7 +224,7 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
 
         const detail_ = (event as CustomEvent).detail;
         const taskIds: number[] | undefined = detail_?.taskIds;
-        if (taskIds && !taskIds.includes(this.taskId)) return;
+        if (!taskIds || !taskIds.includes(this.taskId)) return;
 
         this.listPageActive = true;
         this.lastEventTime = Date.now();
@@ -296,10 +296,9 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
             const newStatus = update.status;
 
             if (prevStatus !== undefined && prevStatus !== newStatus) {
-                this.setState({ lastKnownStatus: newStatus });
                 try {
                     const detail = await api.getSummaryDetail(this.taskId);
-                    this.setState({ detail });
+                    this.setState({ detail, lastKnownStatus: newStatus });
                     if (
                         newStatus === TaskStatus.COMPLETED ||
                         newStatus === TaskStatus.FAILED ||
@@ -310,12 +309,13 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
                             this.loadPersonalResult();
                             this.loadMembers();
                         }
+                        if (detail.schedule_id && detail.schedule_id > 0) {
+                            this.loadSchedule(detail.schedule_id);
+                        }
                     }
                 } catch {
-                    // Detail fetch failed, status already updated
+                    // Don't advance lastKnownStatus — retry on next tick
                 }
-            } else {
-                this.setState({ lastKnownStatus: newStatus });
             }
         } catch {
             // ignore polling errors
