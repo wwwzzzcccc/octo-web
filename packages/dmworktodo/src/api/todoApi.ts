@@ -152,8 +152,8 @@ export async function listTodos(params?: TodoListParams): Promise<PaginatedList<
   return get<PaginatedList<Todo>>('/todos', params as unknown as Record<string, unknown>);
 }
 
-export async function getTodo(todoId: string): Promise<TodoDetail> {
-  return get<TodoDetail>(`/todos/${todoId}`);
+export async function getTodo(todoId: string, sourceChannelId?: string): Promise<TodoDetail> {
+  return get<TodoDetail>(`/todos/${todoId}`, sourceChannelId ? { source_channel_id: sourceChannelId } : undefined);
 }
 
 export async function createTodo(req: CreateTodoReq): Promise<TodoDetail> {
@@ -185,8 +185,8 @@ export async function removeAssignee(todoId: string, userId: string): Promise<vo
 
 // ─── Comments ───────────────────────────────────────────
 
-export async function listComments(todoId: string): Promise<TodoComment[]> {
-  return get<TodoComment[]>(`/todos/${todoId}/comments`);
+export async function listComments(todoId: string, sourceChannelId?: string): Promise<TodoComment[]> {
+  return get<TodoComment[]>(`/todos/${todoId}/comments`, sourceChannelId ? { source_channel_id: sourceChannelId } : undefined);
 }
 
 export async function addComment(todoId: string, content: string): Promise<TodoComment> {
@@ -199,8 +199,8 @@ export async function deleteComment(todoId: string, commentId: string): Promise<
 
 // ─── Attachments ────────────────────────────────────────
 
-export async function listAttachments(todoId: string): Promise<TodoAttachment[]> {
-  return get<TodoAttachment[]>(`/todos/${todoId}/attachments`);
+export async function listAttachments(todoId: string, sourceChannelId?: string): Promise<TodoAttachment[]> {
+  return get<TodoAttachment[]>(`/todos/${todoId}/attachments`, sourceChannelId ? { source_channel_id: sourceChannelId } : undefined);
 }
 
 export async function createAttachment(

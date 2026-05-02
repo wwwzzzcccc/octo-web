@@ -48,9 +48,9 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel,
     setLoading(true);
     try {
       const [t, c, a, g] = await Promise.all([
-        api.getTodo(todoId),
-        api.listComments(todoId),
-        api.listAttachments(todoId),
+        api.getTodo(todoId, channel?.channelId),
+        api.listComments(todoId, channel?.channelId),
+        api.listAttachments(todoId, channel?.channelId),
         api.listGoals(),
       ]);
       setTodo(t);
@@ -62,7 +62,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel,
     } finally {
       setLoading(false);
     }
-  }, [todoId]);
+  }, [todoId, channel?.channelId]);
 
   useEffect(() => {
     load();
@@ -128,14 +128,14 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel,
     try {
       await api.addComment(todoId, newComment.trim());
       setNewComment('');
-      const c = await api.listComments(todoId);
+      const c = await api.listComments(todoId, channel?.channelId);
       setComments(Array.isArray(c) ? c : []);
     } catch (e) {
       Toast.error('添加评论失败');
     } finally {
       setSubmitting(false);
     }
-  }, [todoId, newComment, submitting]);
+  }, [todoId, newComment, submitting, channel?.channelId]);
 
   // ─── 删除评论 ──────────────────────────────────────────
   const handleDeleteComment = useCallback(
@@ -164,14 +164,14 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel,
       setAttachUrl('');
       setAttachName('');
       setShowAttachForm(false);
-      const a = await api.listAttachments(todoId);
+      const a = await api.listAttachments(todoId, channel?.channelId);
       setAttachments(Array.isArray(a) ? a : []);
     } catch (e) {
       Toast.error('添加附件失败');
     } finally {
       setAttachSubmitting(false);
     }
-  }, [todoId, attachUrl, attachName, attachSubmitting]);
+  }, [todoId, attachUrl, attachName, attachSubmitting, channel?.channelId]);
 
   // ─── 删除附件 ──────────────────────────────────────────
   const handleDeleteAttachment = useCallback(
