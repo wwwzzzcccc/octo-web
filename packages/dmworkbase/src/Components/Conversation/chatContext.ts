@@ -1,5 +1,6 @@
 const ChannelTypeGroup = 2
 const ChannelTypePerson = 1
+const ChannelTypeCommunityTopic = 5
 
 export interface ChatContextMember {
     uid: string
@@ -34,7 +35,7 @@ export function buildChatContext(params: {
     const { messages, subscribers, channelType, loginUID, channelInfo } = params
     const names: string[] = []
 
-    if (channelType === ChannelTypeGroup) {
+    if (channelType === ChannelTypeGroup || channelType === ChannelTypeCommunityTopic) {
         if (subscribers.length <= 100) {
             for (const sub of subscribers) {
                 if (sub.uid === loginUID) continue
