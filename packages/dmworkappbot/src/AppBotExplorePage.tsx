@@ -72,7 +72,16 @@ export default function AppBotExplorePage() {
     if (!WKSDK.shared().conversationManager.findConversation(channel)) {
       WKSDK.shared().conversationManager.createEmptyConversation(channel)
     }
-    WKApp.endpoints.showConversation(channel)
+    // Pre-switch to chat tab and give extra time for fullWidth → normal layout
+    // transition (contentRight goes from display:none to visible, needs re-layout)
+    if (WKApp.switchToMenuById && WKApp.currentMenuId !== "chat") {
+      WKApp.switchToMenuById("chat")
+      setTimeout(() => {
+        WKApp.endpoints.showConversation(channel)
+      }, 150)
+    } else {
+      WKApp.endpoints.showConversation(channel)
+    }
   }
 
   const filtered = useMemo(() => {
