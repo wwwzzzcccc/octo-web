@@ -11,13 +11,13 @@ export * from './Service/Provider'
 export * from './Service/Route'
 export * from './Service/DataSource/DataProvider'
 export { default as ChatPage } from "./Pages/Chat"
-export { ChatContentPage } from "./Pages/Chat"
 export * from './Components/ChannelSetting/context'
 export * from './Service/DataSource/DataSource'
 export * from './Components/WKLayout'
 
 export * from './Components/Conversation/context'
 export type { default as ConversationContext} from './Components/Conversation/context'
+export { Conversation } from './Components/Conversation'
 export { default as Search } from './Components/Search'
 export { default as WKNavMainHeader } from './Components/WKNavHeader'
 export { default as WKViewQueueHeader } from './Components/WKViewQueueHeader'

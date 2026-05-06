@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { Channel, ChannelTypePerson, WKSDK } from "wukongimjssdk"
-import { WKApp, ChatContentPage, SpaceService } from "@octo/base"
+import { WKApp, Conversation, SpaceService } from "@octo/base"
 import "./AppBotPage.css"
 
 interface AppBotInfo {
@@ -140,13 +140,11 @@ export default function AppBotPage() {
       WKSDK.shared().conversationManager.createEmptyConversation(channel)
     }
 
-    // Render bot chat with our own header (bypasses SDK channelInfo entirely)
+    // Render bot chat: our header + Conversation (messages + input only, no native header)
     WKApp.routeRight.replaceToRoot(
       <div key={channel.getChannelKey()} className="appbot-chat-wrap">
         <BotChatHeader bot={bot} />
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <ChatContentPage channel={channel} />
-        </div>
+        <Conversation channel={channel} />
       </div>
     )
   }
