@@ -13,6 +13,7 @@ import FriendApplyUI from "../FriendApply";
 import RouteContext, { FinishButtonContext } from "../../Service/Context";
 import { Image } from '@douyinfe/semi-ui';
 import AiBadge from "../AiBadge";
+import RealnameVerifiedBadge from "../RealnameVerifiedBadge";
 
 
 export interface UserInfoProps extends HTMLProps<any> {
@@ -177,6 +178,7 @@ export default class UserInfo extends Component<UserInfoProps> {
                                             <div className="wk-userinfo-user-info-name">
                                                 {vm.displayName()}
                                                 {vm.channelInfo?.orgData?.robot === 1 && <AiBadge />}
+                                                {vm.isRealnameVerified() && <RealnameVerifiedBadge />}
                                             </div>
                                             <div className="wk-userinfo-user-info-others">
                                                 <ul>

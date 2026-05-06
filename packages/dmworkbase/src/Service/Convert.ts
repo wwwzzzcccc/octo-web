@@ -1,6 +1,7 @@
 import BigNumber from "bignumber.js";
 import { Setting } from "wukongimjssdk";
 import { WKSDK, ChannelInfo, Channel, Conversation, Message, MessageStatus, ChannelTypePerson, ChannelTypeGroup,ConversationExtra,Reminder, MessageExtra, Reply } from "wukongimjssdk";
+import { displayName as resolveDisplayName } from "../Utils/displayName";
 
 
 /**
@@ -350,7 +351,20 @@ export class Convert {
         channelInfo.orgData = data.extra || {};
         channelInfo.orgData = { ...channelInfo.orgData, ...data }
         channelInfo.orgData.remark = data.remark ?? "";
-        channelInfo.orgData.displayName = data.remark && data.remark !== "" ? data.remark : channelInfo.title;
+        // YUJ-359 (GH #1121): 展示名解析接入 OCTO 实名认证。
+        // 优先级：remark（本地备注）> real_name（已实名时）> name（昵称）。
+        // 所有消费方统一读 `orgData.displayName`，无需逐点判断 real_name。
+        // 硬约束：仅在 realname_verified 为 true/1 且 real_name 非空时才覆盖昵称；
+        // 字段缺失（老后端）时 behavior 与原实现一致（退化到 remark 或 title）。
+        channelInfo.orgData.realname_verified =
+            data.realname_verified === true || data.realname_verified === 1 ? 1 : 0;
+        channelInfo.orgData.real_name = typeof data.real_name === "string" ? data.real_name : "";
+        channelInfo.orgData.displayName = resolveDisplayName({
+            remark: data.remark,
+            realname_verified: channelInfo.orgData.realname_verified,
+            real_name: channelInfo.orgData.real_name,
+            name: channelInfo.title,
+        }) || channelInfo.title;
         channelInfo.orgData.shortNo = data.short_no ?? ""
 
         channelInfo.logo = data.logo

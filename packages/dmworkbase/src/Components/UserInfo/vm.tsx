@@ -13,6 +13,7 @@ import RouteContext from "../../Service/Context";
 import { GroupRole } from "../../Service/Const";
 import { Convert } from "../../Service/Convert";
 import { resolveExternalForViewer } from "../../Utils/externalViewer";
+import { isRealnameVerified, displayName as resolveDisplayName } from "../../Utils/displayName";
 
 export class UserInfoRouteData {
   uid!: string;
@@ -141,7 +142,24 @@ export class UserInfoVM extends ProviderListener {
     ) {
       return this.fromSubscriberOfUser.remark;
     }
+    // YUJ-359 (GH #1121): 无本地备注时，如果对方已实名认证则优先展示真实姓名。
+    // 未认证 / 字段缺失时走原逻辑（channelInfo.title）。
+    const verifiedName = resolveDisplayName({
+      real_name: this.channelInfo?.orgData?.real_name,
+      realname_verified: this.channelInfo?.orgData?.realname_verified,
+      name: this.channelInfo?.title,
+    });
+    if (verifiedName) return verifiedName;
     return this.channelInfo?.title;
+  }
+
+  /**
+   * YUJ-359 (GH #1121): 对方是否已完成 OCTO 实名认证。
+   * 仅用于个人资料页 ✓ 勾 + 「已实名」tag 展示，
+   * 聊天气泡 / 群成员列表**不**消费此值（不在本任务范围）。
+   */
+  isRealnameVerified(): boolean {
+    return isRealnameVerified(this.channelInfo?.orgData);
   }
 
   // 是否显示昵称

@@ -232,6 +232,16 @@ export class LoginInfo {
   loginProvider?: string;
 
   /**
+   * OCTO 实名认证状态缓存（YUJ-359 / GH #1121）。
+   * 数据源：profile API `/v1/user/me` 或 `/v1/users/:uid`。
+   * 作为跨页面展示「✓ 已实名」和「去认证」CTA 的快速判定，
+   * 完整数据仍以最新 channelInfo.orgData 为准（MeInfo 会主动 fetch 刷新）。
+   */
+  realnameVerified?: boolean;
+  realName?: string;
+  realnameVerifiedAt?: number; // Unix 秒或毫秒，后端未定义前端不展示即可
+
+  /**
    * save 保存登录信息
    */
   public save() {
@@ -244,6 +254,9 @@ export class LoginInfo {
     this.setStorageItemForSID("is_work", this.isWork ? "1" : "0");
     this.setStorageItemForSID("sex", this.sex === 1 ? "1" : "0");
     this.setStorageItemForSID("login_provider", this.loginProvider ?? "");
+    // YUJ-359: 实名认证状态 — 仅持久化 bool + string，避免把大对象写入 storage。
+    this.setStorageItemForSID("realname_verified", this.realnameVerified ? "1" : "0");
+    this.setStorageItemForSID("real_name", this.realName ?? "");
   }
 
   // 获取查询参数
@@ -315,6 +328,10 @@ export class LoginInfo {
     }
     const provider = this.getStorageItemForSID("login_provider");
     this.loginProvider = provider ? provider : undefined;
+    // YUJ-359: 恢复实名认证状态缓存。字段缺失时降级到「未认证」。
+    this.realnameVerified = this.getStorageItemForSID("realname_verified") === "1";
+    const storedRealName = this.getStorageItemForSID("real_name");
+    this.realName = storedRealName ? storedRealName : undefined;
   }
   // 是否登录
   isLogined() {
@@ -338,6 +355,12 @@ export class LoginInfo {
     this.removeStorageItemForSID("name");
     this.removeStorageItemForSID("sex");
     this.removeStorageItemForSID("login_provider");
+    // YUJ-359: 清除实名认证缓存
+    this.realnameVerified = undefined;
+    this.realName = undefined;
+    this.realnameVerifiedAt = undefined;
+    this.removeStorageItemForSID("realname_verified");
+    this.removeStorageItemForSID("real_name");
   }
 }
 

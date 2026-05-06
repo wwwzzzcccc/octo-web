@@ -1,0 +1,42 @@
+/* OCTO 实名认证徽章 — YUJ-359 / GH dmwork-web#1121
+ * 仅用于个人资料页（MeInfo / UserInfo 头部），不进入聊天气泡 / 群成员列表。
+ */
+.wk-realname-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: #2f8cff; /* 蓝色 ✓，OCTO 品牌蓝 */
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    vertical-align: middle;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+
+.wk-realname-badge__icon {
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.wk-realname-badge__text {
+    display: inline-block;
+    padding: 0 5px;
+    height: 16px;
+    line-height: 16px;
+    background: rgba(47, 140, 255, 0.12);
+    color: #2f8cff;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.wk-realname-badge--icon .wk-realname-badge__text {
+    display: none;
+}
+
+.wk-realname-badge--tag .wk-realname-badge__icon {
+    display: none;
+}
