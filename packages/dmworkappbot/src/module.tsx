@@ -1,6 +1,6 @@
 import React from "react"
 import { IModule, WKApp, Menus } from "@octo/base"
-import AppBotExplorePage from "./AppBotExplorePage"
+import AppBotPage from "./AppBotPage"
 
 const AppBotIcon: React.FC<{ active?: boolean }> = ({ active }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -31,7 +31,7 @@ export default class AppBotModule implements IModule {
     _initialized = true
 
     // Register route
-    WKApp.route.register("/appbot", () => <AppBotExplorePage />)
+    WKApp.route.register("/appbot", () => <AppBotPage />)
 
     // Register NavRail menu item (sort=3000, between chat=1000 and contacts=4000)
     WKApp.menus.register(
@@ -44,7 +44,6 @@ export default class AppBotModule implements IModule {
           <AppBotIcon />,
           <AppBotIcon active />,
         )
-        m.fullWidth = true
         return m
       },
       3000,
