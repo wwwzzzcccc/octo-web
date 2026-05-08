@@ -359,7 +359,13 @@ export class Conversation
     WKSDK.shared().chatManager.addMessageStatusListener(ackListener);
 
     // 发送消息（内部会 addTask → task.start()，所有 listener 已就绪）
-    const message = await this.sendMessage(content, channel);
+    let message: Message;
+    try {
+      message = await this.sendMessage(content, channel);
+    } catch (err) {
+      done(); // 清理 listener 和 timer
+      throw err;
+    }
     clientSeq = message.clientSeq;
 
     // sendMessage 返回后主动检查
@@ -436,7 +442,13 @@ export class Conversation
     };
     WKSDK.shared().chatManager.addMessageStatusListener(statusListener);
 
-    const message = await this.sendMessage(content, channel);
+    let message: Message;
+    try {
+      message = await this.sendMessage(content, channel);
+    } catch (err) {
+      done();
+      throw err;
+    }
     clientSeq = message.clientSeq;
 
     // fallback：检查暂存的 ack 或已处理的 status
