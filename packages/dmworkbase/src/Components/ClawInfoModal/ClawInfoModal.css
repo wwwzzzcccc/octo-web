@@ -7,8 +7,9 @@
   overflow: hidden;
 }
 
-/* 关闭按钮右侧间距（需要更高优先级） */
+/* 关闭按钮样式调整 */
 .claw-info-modal.wk-modal .semi-modal-header .semi-modal-header-close {
+  position: absolute !important;
   right: 25px !important;
 }
 
