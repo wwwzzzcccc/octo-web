@@ -108,7 +108,7 @@ export default function SmartCreateModal({
       visible={visible}
       onCancel={onClose}
       footer={null}
-      width={520}
+      width={480}
       closable={false}
       maskClosable
       centered
