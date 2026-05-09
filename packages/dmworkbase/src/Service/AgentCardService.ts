@@ -1,10 +1,19 @@
 import APIClient from './APIClient';
 import FileHelper from '../Utils/filehelper';
+import type {
+  AgentCardData,
+  RuntimeInfo,
+  SessionInfo,
+  CoreFile,
+  MemoryFile,
+} from '../../../dmworkcontacts/src/api/types';
 
 /**
  * AgentCardService
  * 
  * 封装 agent-card-server 接口调用，获取 Agent 运行时信息
+ * 
+ * 类型定义统一使用 @octo/contacts/api/types
  */
 
 /** 文件分组 */
@@ -28,74 +37,14 @@ export interface FileContent {
   content: string;
 }
 
-/** Agent Card 响应 */
-export interface AgentCardResponse {
-  bot_id: string;
-  session_total: number;
-  session_running_count: number;
-  last_report_at: string;
-  runtime_info: RuntimeInfo;
-  sessions: Session[];
-  core_files: CoreFile[];
-  memory_files: MemoryFile[];
-}
+/** Agent Card 响应（兼容别名，实际使用 AgentCardData） */
+export type AgentCardResponse = AgentCardData;
 
-/** 运行时信息 */
-export interface RuntimeInfo {
-  os_version: string;
-  arch: string;
-  disk_space_gb: number;
-  memory_gb: number;
-  app_data_dir: string;
-  claw_version: string;
-  admin_url: string;
-  team_name: string;
-  process_status: string;
-  gateway_status: string;
-  gateway_name: string;
-  claw_id: string;
-  gateway_total_agents: number;
-  gateway_alive_agents: number;
-  nodejs_version: string;
-  network_latency_ms: number;
-  last_heartbeat_at: string;
-  memory_retention_count: number;
-  memory_retention_note: string;
-}
+/** Session 别名（兼容旧代码） */
+export type Session = SessionInfo;
 
-/** Session 信息 */
-export interface Session {
-  session_id: string;
-  session_key: string;
-  channel: string;
-  status: string;
-  peer_name: string;
-  peer_type: string;
-  group_member_count: number | null;
-  model: string;
-  context_used: number;
-  context_total: number;
-  context_percent: number;
-  last_user_message: string;
-  last_active_at: string;
-}
-
-/** 核心文件 */
-export interface CoreFile {
-  file_name: string;
-  category: string;
-  file_size: number;
-  content_preview: string;
-  last_synced_at: string;
-}
-
-/** 记忆文件 */
-export interface MemoryFile {
-  file_name: string;
-  file_size: number;
-  content_preview: string;
-  last_synced_at: string;
-}
+/** 导出共享类型 */
+export type { RuntimeInfo, SessionInfo, CoreFile, MemoryFile };
 
 /** 文件内容响应 */
 export interface FileContentResponse {
