@@ -1,2 +1,2 @@
 export { default } from "./ClawInfoModal";
-export type { ClawInfoModalProps, SessionData, AgentCardData } from "./ClawInfoModal";
+export type { ClawInfoModalProps, SessionData } from "./ClawInfoModal";

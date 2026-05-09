@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import ClawCoreFilesTab from './ClawCoreFilesTab';
 import AgentCardService from '../../Service/AgentCardService';
 import type { AgentCardResponse, FileContentResponse } from '../../Service/AgentCardService';
+import FileHelper from '../../Utils/filehelper';
 
 /**
  * ClawCoreFilesTab - Tab ③ 核心文件
@@ -199,8 +200,14 @@ const mockGetFileContent = async (botId: string, fileName: string) => {
   }
   return {
     name: fileData.file_name,
-    size: AgentCardService['formatFileSize'](fileData.file_size) || `${fileData.file_size}B`,
-    mtime: AgentCardService['formatTime'](fileData.last_synced_at) || fileData.last_synced_at,
+    size: FileHelper.formatFileSize(fileData.file_size),
+    mtime: new Date(fileData.last_synced_at).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
     content: fileData.content,
   };
 };

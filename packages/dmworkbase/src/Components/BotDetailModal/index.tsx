@@ -94,7 +94,7 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
         try {
             const result = await WKApp.apiClient.get(`agent-cards/${requestedUid}/report-status`);
             if (isStale()) return; // 如果已切换到其他 bot，忽略旧请求
-            this.setState({ reported: result.data?.reported || false });
+            this.setState({ reported: result.data?.reported ?? false });
         } catch (error) {
             if (isStale()) return;
             console.error("[BotDetailModal] loadReportStatus failed:", error);

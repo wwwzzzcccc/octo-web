@@ -28,24 +28,32 @@ export default function ClawCoreFilesTab({ botId, height = '100%' }: ClawCoreFil
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadFileGroups = useCallback(async () => {
+  const loadFileGroups = useCallback(async (signal?: { cancelled: boolean }) => {
     setLoading(true);
     setError(null);
 
     try {
       const agentCard = await AgentCardService.getAgentCard(botId);
+      if (signal?.cancelled) return; // 如果已取消，忽略结果
       const groups = AgentCardService.buildFileGroups(agentCard);
       setFileGroups(groups);
     } catch (err) {
+      if (signal?.cancelled) return;
       console.error('Failed to load file groups:', err);
       setError('加载文件列表失败，请稍后重试');
     } finally {
-      setLoading(false);
+      if (!signal?.cancelled) {
+        setLoading(false);
+      }
     }
   }, [botId]);
 
   useEffect(() => {
-    loadFileGroups();
+    const signal = { cancelled: false };
+    loadFileGroups(signal);
+    return () => {
+      signal.cancelled = true;
+    };
   }, [loadFileGroups]);
 
   const handleFetchFile = async (path: string): Promise<FileContent> => {
