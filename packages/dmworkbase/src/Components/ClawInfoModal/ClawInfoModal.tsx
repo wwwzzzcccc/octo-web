@@ -117,7 +117,6 @@ export default function ClawInfoModal({ botId, botName, visible, onClose }: Claw
       failed: "failed",
       killed: "killed",
       timeout: "timeout",
-      stopped: "done", // stopped 映射为 done
     };
     const mappedStatus = statusMap[s.status] || "done";
 
