@@ -542,6 +542,7 @@ function GlobalMatterLinkMenu() {
                   from_uname: m.fromUName || "",
                   timestamp: m.timestamp || 0,
                   content: m.content || "",
+                  attachments: m.attachments || [],
                 })),
               });
               Toast.success("已同步进展");
@@ -633,6 +634,7 @@ function GlobalSmartCreateModal() {
               from_uname: m.fromUName || "",
               timestamp: m.timestamp || 0,
               content: m.content || "",
+              attachments: m.attachments || [],
             })),
           });
           setAiResult({

@@ -80,6 +80,90 @@ function getEffectiveContent(message: Message): MessageContent {
   return message.content;
 }
 
+/**
+ * 从消息 content 里提取附件信息 (file_name + file_url), 供
+ * POST /matters/extract 和 POST /matters/:id/timeline 使用。
+ *
+ * 覆盖的 content type (对齐 Service/Const.ts MessageContentTypeConst):
+ *   - 文件 (8): FileContent { name, url, extension }
+ *   - 图片 (2): ImageContent { name?, url } — 没 name 时合成 'image.{ext}'
+ *   - 语音 (4): VoiceContent { url } — 合成 'voice.amr'
+ *   - 小视频 (5): VideoContent { url } — 合成 'video.mp4'
+ * 其它类型 (文本/卡片/gif/合并转发/系统消息等) 不返回附件, 因为它们要么没有
+ * 文件 URL, 要么语义上不是 "消息附件"。
+ *
+ * 返回空数组, 不返回 null/undefined — 让调用方可以直接传给后端
+ * (后端 json binding 接受空数组)。
+ */
+function extractMessageAttachments(
+  m: Message | undefined | null,
+): { file_name: string; file_url: string }[] {
+  if (!m || !m.content) return [];
+  const contentType = (m.content as { contentType?: number }).contentType;
+  const anyContent = m.content as Record<string, unknown>;
+  const url = typeof anyContent.url === "string" ? (anyContent.url as string) : "";
+  // remoteUrl 是 MediaMessageContent 在 decode 后设置的真实 CDN URL, 优先用
+  const remoteUrl =
+    typeof anyContent.remoteUrl === "string"
+      ? (anyContent.remoteUrl as string)
+      : "";
+  const effectiveUrl = remoteUrl || url;
+  if (!effectiveUrl) return [];
+
+  const explicitName =
+    typeof anyContent.name === "string" ? (anyContent.name as string) : "";
+
+  switch (contentType) {
+    case MessageContentTypeConst.file: {
+      // 文件: 用真实文件名; 兜底合成
+      const ext =
+        typeof anyContent.extension === "string"
+          ? (anyContent.extension as string)
+          : "";
+      const fallback = ext ? `file.${ext}` : "file";
+      return [{ file_name: explicitName || fallback, file_url: effectiveUrl }];
+    }
+    case MessageContentTypeConst.image: {
+      // 图片一般没 name, 用 URL 末尾的文件名, 失败就合成 image.jpg
+      return [
+        {
+          file_name: explicitName || guessFileNameFromUrl(effectiveUrl, "image.jpg"),
+          file_url: effectiveUrl,
+        },
+      ];
+    }
+    case MessageContentTypeConst.voice:
+      return [
+        {
+          file_name: guessFileNameFromUrl(effectiveUrl, "voice.amr"),
+          file_url: effectiveUrl,
+        },
+      ];
+    case MessageContentTypeConst.smallVideo:
+      return [
+        {
+          file_name: guessFileNameFromUrl(effectiveUrl, "video.mp4"),
+          file_url: effectiveUrl,
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+function guessFileNameFromUrl(url: string, fallback: string): string {
+  try {
+    const u = new URL(url, "http://x"); // 允许相对路径
+    const parts = u.pathname.split("/");
+    const last = parts[parts.length - 1];
+    // 必须有真正的文件名 (带扩展名), 否则用 fallback
+    if (last && last.includes(".")) return last;
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
 const foldSessionAvatarIcon = new URL(
   "./fold-session-avatar.svg",
   import.meta.url,
@@ -1820,6 +1904,7 @@ export class Conversation
                             m.content?.text ||
                             "",
                           timestamp: m.message?.timestamp || m.timestamp,
+                          attachments: extractMessageAttachments(m),
                         })),
                       });
                     }}
@@ -1843,6 +1928,7 @@ export class Conversation
                             m.content?.text ||
                             "",
                           timestamp: m.message?.timestamp,
+                          attachments: extractMessageAttachments(m),
                         })),
                       });
                     }}
