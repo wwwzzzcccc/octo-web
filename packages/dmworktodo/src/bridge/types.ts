@@ -14,6 +14,7 @@ export type MatterStatus = 'open' | 'done' | 'archived';
  */
 export interface Matter {
   id: string;
+  seq_no: number;
   space_id: string;
   title: string;
   description?: string;
@@ -55,9 +56,9 @@ export interface MatterChannel {
   created_at: string;
 }
 
-export interface CommentAttachment {
+export interface TimelineAttachment {
   id: string;
-  comment_id: string;
+  entry_id: string;
   file_url: string;
   file_name?: string;
   file_size?: number;
@@ -65,14 +66,24 @@ export interface CommentAttachment {
   created_at: string;
 }
 
-export interface MatterComment {
+export interface TimelineEntry {
   id: string;
   matter_id: string;
   user_id: string;
   content: string | null;
+  channel_id?: string;
+  channel_type?: number;
+  source_channel_id?: string;
+  source_msgs?: string[];
+  related_uids?: string[];
   created_at: string;
-  attachments?: CommentAttachment[];
+  attachments?: TimelineAttachment[];
 }
+
+/** @deprecated 使用 TimelineEntry 替代 */
+export type MatterComment = TimelineEntry;
+/** @deprecated 使用 TimelineAttachment 替代 */
+export type CommentAttachment = TimelineAttachment;
 
 // ─── Pagination ─────────────────────────────────────────
 
@@ -117,17 +128,64 @@ export interface UpdateMatterReq {
   remind_at?: string | null;
 }
 
-export interface CommentAttachmentReq {
+// ─── Extract (AI 智能创建) ──────────────────────────────
+
+export interface ExtractMessageAttachment {
+  file_name: string;
+  file_url: string;
+}
+
+export interface ExtractMessage {
+  message_id: string;
+  from_uid: string;
+  from_uname?: string;
+  timestamp?: number;
+  content?: string;
+  attachments?: ExtractMessageAttachment[];
+}
+
+export interface ExtractMatterReq {
+  channel_type: number;
+  channel_id: string;
+  channel_name?: string;
+  creator_uid: string;
+  msgs: ExtractMessage[];
+}
+
+export interface ExtractResult {
+  id: string;
+  seq_no: number;
+  title: string;
+  description: string;
+  source_msgs: string[];
+  deadline?: number | null;
+  status: string;
+  created_at: string;
+}
+
+// ─── Timeline ───────────────────────────────────────────
+
+export interface TimelineAttachmentReq {
   file_url: string;
   file_name?: string;
   file_size?: number;
   mime_type?: string;
 }
 
-export interface AddCommentReq {
-  content?: string | null;
-  attachments?: CommentAttachmentReq[];
+export interface TimelineReq {
+  content?: string;
+  attachments?: TimelineAttachmentReq[];
+  channel_id?: string;
+  channel_type?: number;
+  channel_name?: string;
+  participant_uid?: string;
+  msgs?: ExtractMessage[];
 }
+
+/** @deprecated 使用 TimelineAttachmentReq 替代 */
+export type CommentAttachmentReq = TimelineAttachmentReq;
+/** @deprecated 使用 TimelineReq 替代 */
+export type AddCommentReq = TimelineReq;
 
 export interface LinkChannelReq {
   channel_id: string;

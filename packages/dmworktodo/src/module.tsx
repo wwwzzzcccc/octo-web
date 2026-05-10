@@ -9,7 +9,7 @@ import ChatMatterPanel from './panel/ChatTodoPanel';
 import MatterDetailPanel from './panel/MatterDetailPanel';
 import MatterLinkMenu from './ui/MatterLinkMenu';
 import SmartCreateModal from './ui/SmartCreateModal';
-import { createMatter, listMatters } from './api/todoApi';
+import { createMatter, extractMatter, listMatters } from './api/todoApi';
 import { Toast } from './utils/toast';
 import CreateTaskModal from './ui/CreateTaskModal';
 import './ui/tokens.css';
@@ -518,8 +518,24 @@ function GlobalSmartCreateModal() {
       count={messages.length}
       onClose={() => setOpen(false)}
       onConfirm={async (req) => {
-        // TODO(backend): 后续 CreateMatterReq 需要扩展 messages 字段
-        await createMatter(req);
+        if (messages.length > 0 && channel) {
+          // 有选中消息 → 调 AI 智能创建接口
+          await extractMatter({
+            channel_type: channel.channelType,
+            channel_id: channel.channelId,
+            creator_uid: WKApp.loginInfo.uid || '',
+            msgs: messages.map((m) => ({
+              message_id: m.messageID || m.messageSeq?.toString() || '',
+              from_uid: m.fromUID || '',
+              from_uname: m.fromUName || '',
+              timestamp: m.timestamp || 0,
+              content: m.content || '',
+            })),
+          });
+        } else {
+          // 无消息 → 普通创建
+          await createMatter(req);
+        }
         Toast.success('事项已创建');
       }}
       channel={channel}

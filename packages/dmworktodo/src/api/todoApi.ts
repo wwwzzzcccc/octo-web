@@ -3,17 +3,18 @@ import { WKApp } from '@octo/base';
 import type {
   Matter,
   MatterDetail,
-  MatterComment,
   MatterChannel,
+  TimelineEntry,
   PaginatedList,
   MatterListParams,
   CreateMatterReq,
   UpdateMatterReq,
   MatterStatus,
   LinkChannelReq,
-  AddCommentReq,
+  ExtractMatterReq,
+  ExtractResult,
+  TimelineReq,
   ListCommentsParams,
-  CommentAttachmentReq,
 } from '../bridge/types';
 
 /**
@@ -166,21 +167,34 @@ export async function unlinkChannel(matterId: string, channelId: string): Promis
   return del<void>(`/matters/${matterId}/channels/${channelId}`);
 }
 
-// ─── Comments ───────────────────────────────────────────
+// ─── Extract (AI 智能创建) ───────────────────────────────
 
-export async function listComments(matterId: string, params?: ListCommentsParams): Promise<PaginatedList<MatterComment>> {
-  return get<PaginatedList<MatterComment>>(`/matters/${matterId}/comments`, params as unknown as Record<string, unknown>);
+export async function extractMatter(req: ExtractMatterReq): Promise<ExtractResult> {
+  return post<ExtractResult>('/matters/extract', req);
 }
 
-export async function addComment(matterId: string, content: string, attachments?: CommentAttachmentReq[]): Promise<MatterComment> {
-  const trimmed = content?.trim() || null;
-  if (!trimmed && (!attachments || attachments.length === 0)) {
-    throw new Error('Comment must have content or attachments');
-  }
-  const body: AddCommentReq = { content: trimmed, attachments };
-  return post<MatterComment>(`/matters/${matterId}/comments`, body);
+// ─── Timeline ───────────────────────────────────────────
+
+export async function listTimeline(matterId: string, params?: ListCommentsParams): Promise<PaginatedList<TimelineEntry>> {
+  return get<PaginatedList<TimelineEntry>>(`/matters/${matterId}/timeline`, params as unknown as Record<string, unknown>);
 }
 
-export async function deleteComment(matterId: string, commentId: string): Promise<void> {
-  return del<void>(`/matters/${matterId}/comments/${commentId}`);
+export async function addTimelineEntry(matterId: string, req: TimelineReq): Promise<TimelineEntry> {
+  return post<TimelineEntry>(`/matters/${matterId}/timeline`, req);
 }
+
+export async function deleteTimelineEntry(matterId: string, entryId: string): Promise<void> {
+  return del<void>(`/matters/${matterId}/timeline/${entryId}`);
+}
+
+// ─── 兼容旧 API（deprecated） ────────────────────────────
+
+/** @deprecated 使用 listTimeline 替代 */
+export const listComments = listTimeline;
+/** @deprecated 使用 addTimelineEntry 替代 */
+export async function addComment(matterId: string, content: string, attachments?: { file_url: string; file_name?: string; file_size?: number; mime_type?: string }[]): Promise<TimelineEntry> {
+  const body: TimelineReq = { content: content?.trim() || undefined, attachments };
+  return post<TimelineEntry>(`/matters/${matterId}/timeline`, body);
+}
+/** @deprecated 使用 deleteTimelineEntry 替代 */
+export const deleteComment = deleteTimelineEntry;
