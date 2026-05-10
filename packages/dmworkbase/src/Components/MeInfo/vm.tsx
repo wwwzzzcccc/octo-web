@@ -20,22 +20,27 @@ import { isRealnameVerified } from "../../Utils/displayName";
 /**
  * MeInfoVM — 自己的「个人信息 / 设置」页面 ViewModel
  *
- * YUJ-359 / GH #1121 接入 OCTO 实名认证：
+ * YUJ-359 / GH #1121 接入实名认证。
+ * YUJ-391 / Aegis Phase 2a：「去认证」入口改为直跳 Aegis 账户页
+ *   （https://accounts.xming.ai/profile/info?anchor=verification），不再
+ *   调用 verify-service 翻译接口。
+ *
  *   - 「名字」行右侧展示 ✓ + 「已实名」tag（已认证）
  *   - 新增「账号安全 · 实名认证」section
  *     · 已认证：展示 「已认证 · {年-月}」不可点
- *     · 未认证：展示「去认证」CTA，点击 POST /v1/internal/verify-token
- *       拿 { token, verify_url } 后 window.open(verify_url, '_blank')
- *   - 用户完成 CAS 回 OCTO 后（URL 带 ?verified=1）由 Main 页触发刷新，
- *     此 VM 的 reload() 会重新拉 users/{uid} 同步状态
+ *     · 未认证：展示「去认证」CTA，点击 `window.open(AEGIS_VERIFY_URL, '_blank')`
+ *       直接跳到 Aegis 账户页的实名认证锚点。
+ *   - Aegis 完成认证后会以 `return_to` 带 `?verified=1` 回跳，由本 VM 的
+ *     didMount 兜底 handler + 全局 useRealnameVerifiedLandingHandler 捕获，
+ *     重新 `reloadSelfProfile()` 同步新状态。
+ *   - 老版本后端兜底仍保留：dmworkim /v1/internal/verify-token 现在返回的
+ *     也是 Aegis URL，老 App 客户端无需改动即可工作。
  */
 export class MeInfoVM extends ProviderListener {
 
     channelInfoListener!:ChannelInfoListener
     /** YUJ-359：本页加载时主动拉取的自身 profile（含 realname_verified / real_name） */
     selfChannelInfo?: ChannelInfo
-    /** YUJ-359：点击「去认证」时禁用按钮，避免重复提交 */
-    verifyPending: boolean = false
 
     didMount(): void {
         this.channelInfoListener = (channelInfo:ChannelInfo)=>{
@@ -59,8 +64,9 @@ export class MeInfoVM extends ProviderListener {
         // 是最新状态（channelInfoListener 只在后续有变更时才会触发）。
         this.reloadSelfProfile()
 
-        // 用户从 CAS 流程返回（verify_url 回调至 OCTO 时通常带 ?verified=1），
-        // 我们在此页再拉一次 profile 并主动清除 URL 里的 verified 参数，
+        // 用户从 Aegis 认证流程返回（Aegis 会按 `return_to` 带 ?verified=1 回跳，
+        // 老 dmwork:// deeplink / verify-service 回跳也都归一化到 ?verified=1），
+        // 在此页再拉一次 profile 并主动清除 URL 里的 verified 参数，
         // 避免二次进入时误触发刷新。
         try {
             const params = new URLSearchParams(window.location.search)
@@ -118,41 +124,27 @@ export class MeInfoVM extends ProviderListener {
     }
 
     /**
-     * YUJ-359 实名认证：POST /v1/internal/verify-token → 拿 {token, verify_url}
-     * 后跳转到 verify_url 完成 CAS 流程。新 tab 打开，避免用户在聊天中途被整页切走。
+     * YUJ-391 / Aegis Phase 2a：「去认证」入口直跳 Aegis 账户页。
      *
-     * 预期后端响应：{ token: string, verify_url: string, expires_in?: number }
+     * 不再调用 dmworkim `/v1/internal/verify-token` 翻译接口 —— Web 端直接
+     * `window.open` 到 Aegis 的实名认证锚点。Aegis 完成后会 redirect 回
+     * 本页（带 ?verified=1），由 didMount 的兜底 handler + 全局
+     * useRealnameVerifiedLandingHandler 触发 reloadSelfProfile 同步状态。
+     *
+     * 兜底：弹窗被浏览器拦截时降级为当前 tab 跳转，确保认证流程能走下去。
+     *
+     * 老 App 兜底：dmworkim 的 verify-token 接口仍然保留，只是现在返回
+     * Aegis URL 而非 verify-service URL，老版本客户端无需改动。
      */
-    async startRealnameVerify() {
-        if (this.verifyPending) return
-        this.verifyPending = true
-        this.notifyListener()
-        try {
-            // YUJ-359 follow-up: Web 显式传 return_to，让 verify-service 在 CAS 完成后
-            // 302 回资料页（带 ?verified=1），避免服务端 default 是 dmwork:// deep link
-            // 时 Web 浏览器不识别导致白屏。didMount 中已有 ?verified=1 检测逻辑
-            // 会自动 reloadSelfProfile。
-            //
-            // origin 用 window.location.origin（https://<host>）而非 hardcode，兼容
-            // im-test / im-prod / 本地 dev 三套环境。pathname 回到个人信息页。
-            const returnTo = `${window.location.origin}${window.location.pathname}?verified=1`
-            const res = await WKApp.apiClient.post("internal/verify-token", { return_to: returnTo })
-            const verifyUrl = (res as any)?.verify_url
-            if (typeof verifyUrl !== "string" || verifyUrl.length === 0) {
-                Toast.error("获取认证链接失败，请稍后再试")
-                return
-            }
-            // 新 tab 打开，noopener 防止 verify service 反操作当前窗口
-            const opened = window.open(verifyUrl, "_blank", "noopener,noreferrer")
-            if (!opened) {
-                // 弹窗被浏览器拦截时降级为当前 tab 跳转
-                window.location.href = verifyUrl
-            }
-        } catch (e: any) {
-            Toast.error(e?.msg || "获取认证链接失败")
-        } finally {
-            this.verifyPending = false
-            this.notifyListener()
+    startRealnameVerify() {
+        // 写成常量而非 WKApp.config 可配置值：Aegis 域名目前在全公司范围统一，
+        // 不存在 per-环境覆盖；未来若需分环境再提到 config / endpoint。
+        const AEGIS_VERIFY_URL = "https://accounts.xming.ai/profile/info?anchor=verification"
+        // 新 tab 打开，noopener 防止 Aegis 反操作当前窗口
+        const opened = window.open(AEGIS_VERIFY_URL, "_blank", "noopener,noreferrer")
+        if (!opened) {
+            // 弹窗被浏览器拦截时降级为当前 tab 跳转
+            window.location.href = AEGIS_VERIFY_URL
         }
     }
 
@@ -322,7 +314,7 @@ export class MeInfoVM extends ProviderListener {
         }))
 
         // YUJ-359：账号安全 · 实名认证。
-        // 已认证：展示文本行，点击无动作；未认证：点击触发 verify-token → CAS。
+        // YUJ-391 / Aegis Phase 2a：未认证点击直跳 Aegis 账户页。
         const verified = !!WKApp.loginInfo.realnameVerified
         sections.push(new Section({
             title: "账号安全",
@@ -333,10 +325,9 @@ export class MeInfoVM extends ProviderListener {
                         title: "实名认证",
                         subTitle: verified
                             ? this.formatVerifiedAtLabel()
-                            : (this.verifyPending ? "正在获取认证链接…" : "去认证"),
+                            : "去认证",
                         onClick: () => {
                             if (verified) return
-                            if (this.verifyPending) return
                             this.startRealnameVerify()
                         }
                     }
