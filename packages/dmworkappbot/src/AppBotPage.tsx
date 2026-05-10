@@ -30,48 +30,6 @@ const BOT_DEFAULT_AVATAR_DATA_URI = "data:image/svg+xml," + encodeURIComponent(
   + '</svg>'
 )
 
-const AVATAR_GRADIENTS = [
-  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-  "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-  "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)",
-  "linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)",
-  "linear-gradient(135deg, #5ee7df 0%, #b490ca 100%)",
-]
-
-function pickGradient(seed: string): string {
-  let hash = 0
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0
-  }
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]
-}
-
-function isSafeImageUrl(url: string): boolean {
-  if (!url) return false
-  try {
-    const parsed = new URL(url, window.location.origin)
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
-  } catch {
-    return false
-  }
-}
-
-function BotIconFallback() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="4" y="8" width="16" height="12" rx="3" stroke="white" strokeWidth="1.5" fill="rgba(255,255,255,0.2)" />
-      <circle cx="9" cy="14" r="1.5" fill="white" />
-      <circle cx="15" cy="14" r="1.5" fill="white" />
-      <path d="M9.5 17.5C10 18.5 11 19 12 19C13 19 14 18.5 14.5 17.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="12" y1="4" x2="12" y2="8" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="12" cy="3.5" r="1.5" fill="white" />
-    </svg>
-  )
-}
-
 /** Lightweight error toast — self-removing DOM element, no external dependency. */
 function showErrorToast(message: string) {
   const el = document.createElement("div")
@@ -112,7 +70,7 @@ function BotChatHeader({ bot }: { bot: AppBotInfo }) {
   return (
     <div className="appbot-chat-header">
       <div className="appbot-chat-header-avatar">
-        <img src={botAvatarUrl(bot.uid)} alt={bot.display_name} />
+        <img src={botAvatarUrl(bot.uid)} alt={bot.display_name} onError={(e) => { (e.target as HTMLImageElement).src = BOT_DEFAULT_AVATAR_DATA_URI }} />
       </div>
       <div className="appbot-chat-header-name">{bot.display_name}</div>
     </div>
@@ -243,7 +201,7 @@ export default function AppBotPage() {
         onClick={() => handleSelect(bot)}
       >
         <div className="appbot-list-avatar">
-          <img src={botAvatarUrl(bot.uid)} alt={bot.display_name} />
+          <img src={botAvatarUrl(bot.uid)} alt={bot.display_name} onError={(e) => { (e.target as HTMLImageElement).src = BOT_DEFAULT_AVATAR_DATA_URI }} />
         </div>
         <div className="appbot-list-info">
           <div className="appbot-list-name">{bot.display_name}</div>
