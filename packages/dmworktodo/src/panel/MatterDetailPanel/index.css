@@ -516,6 +516,17 @@ textarea.wk-mp-goal__text--editing {
   color: var(--wk-text-primary, #18181b);
 }
 
+/* 未加入群: 群名模糊 + 鼠标悬停变问号, 提示用户这是不可访问的群 */
+.wk-mp-channels__card-name--blur {
+  filter: blur(4px);
+  user-select: none;
+  cursor: help;
+}
+
+.wk-mp-channels__card-name--blur:hover {
+  filter: blur(2px);
+}
+
 .wk-mp-channels__card-time {
   font-size: 11px;
   color: var(--wk-text-tertiary, #a1a1aa);

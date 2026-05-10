@@ -29,6 +29,7 @@ import WKAvatar from "@octo/base/src/Components/WKAvatar";
 import { Channel, ChannelTypePerson } from "wukongimjssdk";
 import { WKApp } from "@octo/base";
 import { useChannelName } from "../../hooks/useChannelName";
+import { useMyGroups } from "../../hooks/useMyGroups";
 import "./index.css";
 
 export interface MatterDetailPanelProps {
@@ -256,6 +257,11 @@ export default function MatterDetailPanel({
     matter?.source_channel_id,
     matter?.source_channel_type,
   );
+
+  // 拉取当前用户加入的所有群, 用于判断 Matter 关联群聊里哪些是我没加入的:
+  //   - 没加入的群: 群名模糊展示, 时间线条目不展示 "↗ 原消息" (权限不允许)
+  //   - 拉取失败时 failed=true, 保守处理成 "全部未加入" (宁可多遮)
+  const { groupNos: myGroupNos, failed: myGroupsFailed } = useMyGroups();
 
   // ── Empty / Loading / Error ──
 
@@ -503,7 +509,12 @@ export default function MatterDetailPanel({
             {channels.length === 0 ? (
               <div className="wk-mp-channels__empty">暂无关联群聊</div>
             ) : (
-              channels.map((ch) => (
+              channels.map((ch) => {
+                // 用户是否加入本群: 从 /group/my 拉的 group_no 集合判断。
+                // 拉取失败 (myGroupsFailed) 时保守当成未加入, 宁可多遮。
+                const isMember =
+                  !myGroupsFailed && myGroupNos.has(ch.channel_id);
+                return (
                 <div key={ch.id} className="wk-mp-channels__card">
                   <div className="wk-mp-channels__card-head">
                     <span className="wk-mp-channels__card-name">
@@ -512,6 +523,7 @@ export default function MatterDetailPanel({
                         channelId={ch.channel_id}
                         channelType={ch.channel_type}
                         fallback={ch.channel_name}
+                        blur={!isMember}
                       />
                     </span>
                     <span className="wk-mp-channels__card-time">
@@ -592,24 +604,31 @@ export default function MatterDetailPanel({
                       return (
                         <TimelinePanel
                           entries={chEntries}
-                          onShowAnchor={(entry, ev) => {
-                            const rect =
-                              ev.currentTarget.getBoundingClientRect();
-                            setAnchor({
-                              channelId: ch.channel_id,
-                              channelType: ch.channel_type,
-                              channelName:
-                                ch.channel_name ||
-                                ch.channel_id.slice(0, 8),
-                              messageIds: entry.source_msgs || [],
-                              ...computeAnchorPosition(rect),
-                            });
-                          }}
+                          // 未加入该群时不提供 onShowAnchor, TimelinePanel
+                          // 会据此隐藏 '↗ 原消息' 按钮 (没权限查原消息)。
+                          onShowAnchor={
+                            isMember
+                              ? (entry, ev) => {
+                                  const rect =
+                                    ev.currentTarget.getBoundingClientRect();
+                                  setAnchor({
+                                    channelId: ch.channel_id,
+                                    channelType: ch.channel_type,
+                                    channelName:
+                                      ch.channel_name ||
+                                      ch.channel_id.slice(0, 8),
+                                    messageIds: entry.source_msgs || [],
+                                    ...computeAnchorPosition(rect),
+                                  });
+                                }
+                              : undefined
+                          }
                         />
                       );
                     })()}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -628,6 +647,15 @@ export default function MatterDetailPanel({
             ) : (
               <TimelinePanel
                 entries={timeline}
+                canShowAnchor={(entry) => {
+                  // 变更记录 tab 跨多个 channel, 逐条判断当前用户
+                  // 是否在 entry 所属群里。/group/my 拉取失败时
+                  // myGroupsFailed=true, 全部按未加入处理 (保守遮)。
+                  if (myGroupsFailed) return false;
+                  const groupNo = entry.source_channel_id;
+                  if (!groupNo) return false;
+                  return myGroupNos.has(groupNo);
+                }}
                 onShowAnchor={(entry, ev) => {
                   // 变更记录 tab 下每条 entry 可能属于不同 channel。
                   // IM 接口要的是真实群号 (32 hex), 在 timeline 的
@@ -973,6 +1001,7 @@ function formatTime(iso: string): string {
 function TimelinePanel({
   entries,
   onShowAnchor,
+  canShowAnchor,
 }: {
   entries: TimelineEntry[];
   /**
@@ -981,6 +1010,13 @@ function TimelinePanel({
    * event 用来拿按钮 boundingClientRect, 把 popover 锚定到按钮附近。
    */
   onShowAnchor?: (entry: TimelineEntry, event: React.MouseEvent) => void;
+  /**
+   * 可选: 逐条判断某 entry 是否允许 "查看原消息" (典型场景: 当前用户
+   * 不在该条 entry 所属 channel, 没权限拉原消息)。
+   * 返回 false 时该条不显示原消息按钮, 即使 source_msgs 非空。
+   * 不传 = 默认所有条都允许 (由 onShowAnchor + source_msgs 决定)。
+   */
+  canShowAnchor?: (entry: TimelineEntry) => boolean;
 }) {
   const [sortNewest, setSortNewest] = useState(true);
 
@@ -1076,8 +1112,15 @@ function TimelinePanel({
                       {e.attachments.length} 附件
                     </span>
                   )}
-                  {/* ↗ 原消息: 只有 entry 带 source_msgs 时才可点 */}
+                  {/* ↗ 原消息: 
+                      - entry 没有 source_msgs → 置灰 (保持原按钮占位, 避免
+                        其它条目对不齐) 
+                      - 调用方用 canShowAnchor 否决 (典型: 用户不在该条
+                        entry 所属 channel, 没权限查原消息) → 整个按钮不渲染 */}
                   {(() => {
+                    const anchorAllowed =
+                      !canShowAnchor || canShowAnchor(e);
+                    if (!anchorAllowed) return null;
                     const hasSource =
                       !!onShowAnchor &&
                       Array.isArray(e.source_msgs) &&
@@ -1136,18 +1179,33 @@ function TimelinePanel({
 //
 // 优先级: WKSDK 反查最新群名 > 后端保存的 channel_name 快照 > id 前缀兜底
 // 群改名后 WKSDK cache 会推新值, 组件自动重渲染。
+//
+// blur: 当前用户不在该群时 (从 /group/my 判定), 模糊展示群名以遮住名称。
 
 function ChannelNameLabel({
   channelId,
   channelType,
   fallback,
+  blur,
 }: {
   channelId: string;
   channelType: number;
   fallback?: string;
+  blur?: boolean;
 }) {
   const live = useChannelName(channelId, channelType);
-  return <>{live || fallback || channelId.slice(0, 8)}</>;
+  const display = live || fallback || channelId.slice(0, 8);
+  if (blur) {
+    return (
+      <span
+        className="wk-mp-channels__card-name--blur"
+        title="你不在该群, 群名已隐藏"
+      >
+        {display}
+      </span>
+    );
+  }
+  return <>{display}</>;
 }
 
 // ─── TimelineInput (添加进展) ─────────────────────────────
