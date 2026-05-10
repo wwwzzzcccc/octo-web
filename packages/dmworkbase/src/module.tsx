@@ -467,8 +467,30 @@ export default class BaseModule implements IModule {
           WKApp.loginInfo.name = channelInfo.title;
           WKApp.loginInfo.shortNo = channelInfo.orgData.short_no;
           WKApp.loginInfo.sex = channelInfo.orgData.sex;
+          // YUJ-404 Round 7 (Jerry R6 Critical)：把 self Person channelInfo 的
+          // realname_verified 归一化同步回 loginInfo。登录 API 响应 不 包含
+          // realname_verified、loginSuccess 也没赋值，导致 loginInfo.save() 把
+          // 未定义字段落盘成 "0"，YUJ-404 的 self-fallback
+          // (loginInfo.realnameVerified === true) 永远不过关。self channelInfo
+          // 到达是 app 内唯一一个能读到权威实名状态的时机，必须回写。
+          const rv = channelInfo.orgData?.realname_verified;
+          WKApp.loginInfo.realnameVerified =
+            rv === true || rv === 1 || rv === "1" || rv === "true";
           WKApp.loginInfo.save();
         }
+      }
+    });
+
+    // YUJ-404 Round 7 (Jerry R6 Critical)：登录成功后主动 fetch self Person
+    // channelInfo。WKSDK 不会自动拉 self 的 channelInfo，而上面的 listener
+    // 需要这条 channelInfo 到达才能把 realname_verified 回写到 loginInfo。
+    // 不主动 fetch 的话， self bubble 首屏会永远读不到实名状态。
+    WKApp.endpoints.addOnLogin(() => {
+      const uid = WKApp.loginInfo.uid;
+      if (!uid) return;
+      const selfChannel = new Channel(uid, ChannelTypePerson);
+      if (!WKSDK.shared().channelManager.getChannelInfo(selfChannel)) {
+        WKSDK.shared().channelManager.fetchChannelInfo(selfChannel);
       }
     });
 

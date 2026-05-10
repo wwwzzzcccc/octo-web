@@ -19,7 +19,8 @@ import {
 import { IConversationProvider } from "../../Service/DataSource/DataProvider";
 import WKApp from "../../App";
 import { resolveExternalForViewer } from "../../Utils/externalViewer";
-import { subscriberDisplayName, isRealnameVerified } from "../../Utils/displayName";
+import { subscriberDisplayName } from "../../Utils/displayName";
+import { shouldShowRealnameBadge } from "../../Utils/realnameBadge";
 import { css } from "@emotion/react";
 // import ClockLoader from "react-spinners/ClockLoader";
 import Checkbox from "../../Components/Checkbox";
@@ -56,12 +57,48 @@ export default class MessageBase extends Component<MessageBaseProps, any> {
   }
   componentDidMount() {
     const self = this;
+
+    // YUJ-404 Round 6 (Jerry R5 Warning)：收窄 conversation channelInfo fetch/listen
+    // 到仅 Person 1v1。timing race 只发生在 self-sent Person 1v1 + 首帧缓存未到的
+    // bot DM 场景，群消息不需要拉 group channelInfo 来判 self fallback。
+    // YUJ-404 Round 9 (Jerry R8 🔴 Warning)：在 1v1 场景中 message.channel 和
+    // sender Person Channel 是同一个（fromUID 即对端）。render 路径另有一处
+    // 会 fetch sender channelInfo（本文件 line ~341），不 dedupe 的话 legacy 媒体/
+    // 文件消息历史首屏会双倍 fetch。这里用 fromUID 做 dedupe：
+    // 对方发来的 1v1 消息，msgChannel.channelID === fromUID → 不重复 fetch。
+    const msgChannel = this.props.message.channel;
+    const msgFromUID = this.props.message.fromUID;
+    if (
+      msgChannel &&
+      msgChannel.channelType === ChannelTypePerson &&
+      !(msgFromUID && msgChannel.channelID === msgFromUID)
+    ) {
+      const convCached = WKSDK.shared().channelManager.getChannelInfo(
+        msgChannel
+      );
+      if (!convCached) {
+        WKSDK.shared().channelManager.fetchChannelInfo(msgChannel);
+      }
+    }
+
     this.channelInfoListener = (channelInfo: ChannelInfo) => {
       if (!channelInfo) {
         return;
       }
       const { message } = self.props;
+      // 发送者 channelInfo（Person）到达 → rerender（姓名 / 徽章 / is-bot 判定）
       if (message.fromUID === channelInfo.channel.channelID) {
+        self.setState({});
+        return;
+      }
+      // YUJ-404 Round 5：会话对端 channelInfo 到达 → rerender，让徽章走真实
+      // isBotConversation 判定（替换首帧保守兜底）。
+      const convChannel = message.channel;
+      if (
+        convChannel &&
+        channelInfo.channel.channelID === convChannel.channelID &&
+        channelInfo.channel.channelType === convChannel.channelType
+      ) {
         self.setState({});
       }
     };
@@ -358,12 +395,41 @@ export default class MessageBase extends Component<MessageBaseProps, any> {
     const extSourceSpaceName = extResolved.sourceSpaceName;
 
     // YUJ-379 / Epic dmwork-web#1169: 聊天气泡作者名旁的实名徽章。
-    // 优先读群成员 orgData（群内命中率最高），回落到 Person channelInfo.orgData
-    // （1v1 私聊 / 群成员列表尚未同步）。系统消息 / AI / 缺字段场景一律不渲染。
-    const showRealnameBadge =
-      !isAi &&
-      (isRealnameVerified(groupMember?.orgData) ||
-        isRealnameVerified(channelInfo?.orgData));
+    //
+    // YUJ-404 Round 4 (legacy dir 例外，见 PR description "Legacy Dir Exception
+    // Declaration" 段)：本目录 `Messages/` 已被 AGENTS.config.json 标为
+    // legacy_dirs，但 MessageBase 仍在生产渲染 Voice / Gif / Location / File /
+    // Video 等类型（尚未迁到新 MessageRow），产品需求要求所有消息类型气泡都显示
+    // 徽章，因此这里必须和 bridge 路径走 **同一套** 判定规则。
+    //
+    // 共享 helper `shouldShowRealnameBadge` 的优先级：isAi → isBotConversation →
+    // isBotSender → groupMember orgData → channelInfo orgData → self-fallback。
+    // 判定维度对齐 `src/bridge/message/useMessageRow.ts`，任何规则改动请同步两处。
+    const conversationChannelInfo = message.channel
+      ? WKSDK.shared().channelManager.getChannelInfo(message.channel)
+      : undefined;
+    const isOwnMessage = message.fromUID === WKApp.loginInfo.uid;
+    // YUJ-404 Round 5 (legacy dir 例外)：和 bridge 路径 useMessageRow.ts 对齐。
+    // Person 1v1 + self-sent + 对端 channelInfo 首帧未缓存时采取保守策略：
+    // 把 isBotConversation 先当 true 压制 self-fallback，防止 self-sent bot
+    // DM 首帧误显 ✓。listener 会在 channelInfo 到达后 rerender 切回真实判定。
+    const isPersonConversation =
+      message.channel?.channelType === ChannelTypePerson;
+    const conversationChannelInfoMissing =
+      isPersonConversation && !conversationChannelInfo;
+    const isBotConversation =
+      conversationChannelInfo?.orgData?.robot === 1 ||
+      (conversationChannelInfoMissing && isOwnMessage);
+    const isBotSender = channelInfo?.orgData?.robot === 1;
+    const showRealnameBadge = shouldShowRealnameBadge({
+      isAi,
+      isBotConversation,
+      isBotSender,
+      isOwnMessage,
+      groupMemberOrgData: groupMember?.orgData,
+      channelInfoOrgData: channelInfo?.orgData,
+      loginRealnameVerified: WKApp.loginInfo.realnameVerified,
+    });
 
     return (
       <div
