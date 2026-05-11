@@ -335,13 +335,22 @@ textarea.wk-mp-goal__text--editing {
   color: var(--wk-text-tertiary, #71717a);
   padding: 2px 6px;
   border-radius: 4px;
-  cursor: pointer;
   transition: all 0.12s;
 }
 
-.wk-mp-goal__source:hover {
+.wk-mp-goal__source--clickable {
+  cursor: pointer;
+}
+
+.wk-mp-goal__source--clickable:hover {
   color: var(--wk-text-primary, #18181b);
   background: var(--wk-bg-hover, #f4f4f5);
+}
+
+.wk-mp-goal__source-anchor {
+  font-size: 10px;
+  color: var(--wk-matter-accent, #8b5cf6);
+  font-weight: 500;
 }
 
 .wk-mp-goal__source-sep {

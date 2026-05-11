@@ -670,6 +670,14 @@ function GlobalSmartCreateModal() {
       count={messages.length}
       loading={aiLoading}
       initialValues={aiResult}
+      sourceMsgs={messages.length > 0 ? messages.map((m) => ({
+        message_id: m.messageID || m.messageSeq?.toString() || "",
+        from_uid: m.fromUID || "",
+        from_uname: m.fromUName || "",
+        timestamp: m.timestamp || 0,
+        content: m.content || "",
+        attachments: m.attachments || [],
+      })) : undefined}
       onClose={() => setOpen(false)}
       onConfirm={async (req) => {
         await createMatter(req);

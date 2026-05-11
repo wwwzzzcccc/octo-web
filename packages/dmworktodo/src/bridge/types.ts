@@ -29,6 +29,7 @@ export interface Matter {
   source_channel_id?: string;
   source_channel_type?: number;
   source_name?: string;
+  source_msgs?: string[];
   assignees?: MatterAssignee[];
   created_at: string;
   updated_at: string;
@@ -139,6 +140,7 @@ export interface CreateMatterReq {
   source_name?: string;
   deadline?: string;
   remind_at?: string;
+  source_msgs?: ExtractMessage[];
 }
 
 export interface UpdateMatterReq {

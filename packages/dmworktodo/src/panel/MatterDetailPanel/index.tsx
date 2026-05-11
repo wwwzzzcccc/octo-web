@@ -549,7 +549,31 @@ export default function MatterDetailPanel({
             }}
           />
           {matter.source_channel_id && (
-            <div className="wk-mp-goal__source">
+            <div
+              className={`wk-mp-goal__source${matter.source_msgs && matter.source_msgs.length > 0 ? " wk-mp-goal__source--clickable" : ""}`}
+              onClick={(ev) => {
+                if (matter.source_msgs && matter.source_msgs.length > 0) {
+                  const rect = ev.currentTarget.getBoundingClientRect();
+                  setAnchor({
+                    channelId: matter.source_channel_id!,
+                    channelType: matter.source_channel_type || 0,
+                    channelName: displaySourceName,
+                    messageIds: matter.source_msgs,
+                    ...computeAnchorPosition(rect),
+                  });
+                }
+              }}
+              title={
+                matter.source_msgs && matter.source_msgs.length > 0
+                  ? "点击查看原消息上下文"
+                  : undefined
+              }
+              style={
+                matter.source_msgs && matter.source_msgs.length > 0
+                  ? { cursor: "pointer" }
+                  : undefined
+              }
+            >
               <svg
                 width="10"
                 height="10"
@@ -561,6 +585,9 @@ export default function MatterDetailPanel({
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               <span>来自 #{displaySourceName}</span>
+              {matter.source_msgs && matter.source_msgs.length > 0 && (
+                <span className="wk-mp-goal__source-anchor">↗</span>
+              )}
               <span className="wk-mp-goal__source-sep">·</span>
               <UserName uid={matter.creator_id} />
               <span className="wk-mp-goal__source-sep">·</span>

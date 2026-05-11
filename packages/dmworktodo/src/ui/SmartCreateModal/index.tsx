@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Modal, DatePicker, Spin } from "@douyinfe/semi-ui";
-import type { CreateMatterReq } from "../../bridge/types";
+import type { CreateMatterReq, ExtractMessage } from "../../bridge/types";
 import MemberPicker from "../MemberPicker";
 import "./index.css";
 
@@ -14,6 +14,8 @@ export interface SmartCreateModalProps {
   loading?: boolean;
   /** AI 提取完成后传入的初始值 */
   initialValues?: { title?: string; description?: string; deadline?: string };
+  /** 智能总结所用的消息列表 */
+  sourceMsgs?: ExtractMessage[];
   /** 关闭弹窗 */
   onClose: () => void;
   /** 创建事项 */
@@ -47,6 +49,7 @@ export default function SmartCreateModal({
   count,
   loading = false,
   initialValues,
+  sourceMsgs,
   onClose,
   onConfirm,
   channel,
@@ -99,6 +102,7 @@ export default function SmartCreateModal({
         deadline: deadline ? `${deadline}T23:59:59+08:00` : undefined,
         source_channel_id: channel?.channelId,
         source_channel_type: channel?.channelType,
+        source_msgs: sourceMsgs,
       });
       onClose();
     } catch {
@@ -114,6 +118,7 @@ export default function SmartCreateModal({
     assigneeUids,
     deadline,
     channel,
+    sourceMsgs,
     onConfirm,
     onClose,
   ]);
