@@ -14,7 +14,6 @@ import {
   transitionMatter,
   deleteMatter,
   linkChannel,
-  unlinkChannel,
   listTimeline,
   addTimelineEntry,
   deleteTimelineEntry,
@@ -306,21 +305,22 @@ export default function MatterDetailPanel({
     applyMatterUpdate(updated);
   }, [matter, applyMatterUpdate]);
 
-  const handleUnlinkChannel = useCallback(
-    async (chId: string) => {
-      if (!matter) return;
-      if (!window.confirm("确定取消关联此频道？")) return;
-      try {
-        await unlinkChannel(matter.id, chId);
-        const updated = await getMatter(matter.id);
-        applyMatterUpdate(updated);
-        Toast.success("已取消关联");
-      } catch {
-        Toast.error("取消关联失败");
-      }
-    },
-    [matter, applyMatterUpdate],
-  );
+  // 取消关联功能暂时不实现，先注释掉
+  // const handleUnlinkChannel = useCallback(
+  //   async (chId: string) => {
+  //     if (!matter) return;
+  //     if (!window.confirm("确定取消关联此频道？")) return;
+  //     try {
+  //       await unlinkChannel(matter.id, chId);
+  //       const updated = await getMatter(matter.id);
+  //       applyMatterUpdate(updated);
+  //       Toast.success("已取消关联");
+  //     } catch {
+  //       Toast.error("取消关联失败");
+  //     }
+  //   },
+  //   [matter, applyMatterUpdate],
+  // );
 
   const handleDeleteTimeline = useCallback(
     async (entryId: string) => {
@@ -725,11 +725,11 @@ export default function MatterDetailPanel({
                       })}{" "}
                       关联
                     </span>
-                    {/* 未加入群时隐藏 '取消关联' 菜单 (对齐原型: 非成员
-                        不能 CRUD 跟本群相关的绑定关系) */}
+                    {/* 查看群聊菜单: 仅群成员可见 (非成员无权限查看群聊) */}
                     {isMember && (
                       <ChannelMoreMenu
-                        onUnlink={() => handleUnlinkChannel(ch.channel_id)}
+                        channelId={ch.channel_id}
+                        channelType={ch.channel_type}
                       />
                     )}
                   </div>
@@ -1026,9 +1026,15 @@ function MoreMenu({ onDelete }: { onDelete: () => void }) {
   );
 }
 
-// ─── ChannelMoreMenu (查看群聊 / 取消关联) ────────────────
+// ─── ChannelMoreMenu (查看群聊) ────────────────
 
-function ChannelMoreMenu({ onUnlink }: { onUnlink: () => void }) {
+function ChannelMoreMenu({
+  channelId,
+  channelType,
+}: {
+  channelId: string;
+  channelType: number;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -1040,6 +1046,14 @@ function ChannelMoreMenu({ onUnlink }: { onUnlink: () => void }) {
     document.addEventListener("mousedown", c);
     return () => document.removeEventListener("mousedown", c);
   }, [open]);
+
+  const handleViewChannel = () => {
+    setOpen(false);
+    // 跳转到群聊
+    const channel = new Channel(channelId, channelType);
+    WKApp.endpoints.showConversation(channel);
+  };
+
   return (
     <span className="wk-mp-ch-more" ref={ref} style={{ marginLeft: "auto" }}>
       <button
@@ -1067,7 +1081,7 @@ function ChannelMoreMenu({ onUnlink }: { onUnlink: () => void }) {
           <button
             type="button"
             className="wk-mp-ch-more__item"
-            onClick={() => setOpen(false)}
+            onClick={handleViewChannel}
           >
             <svg
               width="11"
@@ -1083,7 +1097,8 @@ function ChannelMoreMenu({ onUnlink }: { onUnlink: () => void }) {
             </svg>
             查看群聊
           </button>
-          <button
+          {/* 取消关联功能暂时隐藏，待后续实现 */}
+          {/* <button
             type="button"
             className="wk-mp-ch-more__item wk-mp-ch-more__item--danger"
             onClick={() => {
@@ -1103,7 +1118,7 @@ function ChannelMoreMenu({ onUnlink }: { onUnlink: () => void }) {
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
             取消关联
-          </button>
+          </button> */}
         </div>
       )}
     </span>

@@ -5,6 +5,8 @@ import UserName from '../UserName';
 import { useChannelName } from '../../hooks/useChannelName';
 import type { IMMessageResp } from '../../api/imMessageApi';
 import { getMessageByChannel as defaultGetMessage } from '../../api/imMessageApi';
+import { WKApp } from '@octo/base';
+import { ShowConversationOptions } from '@octo/base/src/EndpointCommon';
 import './index.css';
 
 /**
@@ -145,11 +147,30 @@ export default function AnchorPopover({
 
     const stop = (e: React.MouseEvent) => e.stopPropagation();
 
+    // 跳转到原消息：使用第一条成功加载的消息的 message_seq 定位
+    const handleJumpToMessage = useCallback(() => {
+        // 找到第一条成功加载的消息
+        const firstSuccess = results.find((r) => r.ok);
+        if (!firstSuccess || !firstSuccess.ok) return;
+
+        const messageSeq = firstSuccess.data.message_seq;
+        const channel = new Channel(channelId, channelType);
+        const opts = new ShowConversationOptions();
+        opts.initLocateMessageSeq = messageSeq;
+
+        // 关闭弹框并跳转
+        onClose();
+        WKApp.endpoints.showConversation(channel, opts);
+    }, [results, channelId, channelType, onClose]);
+
     // 有 x/y 时锚定到指定 viewport 坐标 (按钮下方), 无则走 CSS 居中
     const anchored = typeof x === 'number' && typeof y === 'number';
     const popStyle: React.CSSProperties | undefined = anchored
         ? { top: y, left: x, right: 'auto', bottom: 'auto', transform: 'none' }
         : undefined;
+
+    // 是否有成功加载的消息（用于判断是否显示跳转按钮）
+    const hasValidMessage = !loading && results.some((r) => r.ok);
 
     return (
         <>
@@ -191,6 +212,19 @@ export default function AnchorPopover({
                             <MessageRow key={r.id} result={r} />
                         ))}
                 </div>
+
+                {/* 跳转到原消息链接：仅在有有效消息时显示 */}
+                {hasValidMessage && (
+                    <div className="wk-anchor-pop__footer">
+                        <button
+                            type="button"
+                            className="wk-anchor-pop__jump-link"
+                            onClick={handleJumpToMessage}
+                        >
+                            ↗ 跳到原消息
+                        </button>
+                    </div>
+                )}
             </div>
         </>
     );
