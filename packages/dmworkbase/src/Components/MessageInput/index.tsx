@@ -233,7 +233,27 @@ export class MentionModel {
   all: boolean = false;
   uids?: Array<string>;
   entities?: MentionEntity[];
+  /**
+   * Three-state mention flags. Sent to server alongside literal "@所有人" / "@所有AI"
+   * text. Server normalizes legacy `all=1` into `humans=1` outbound, so renderers
+   * may see either field set; both must be honored.
+   *
+   * - humans: 1 → "@所有人" should be highlighted on receivers
+   * - ais:    1 → "@所有AI"  should be highlighted on receivers
+   *
+   * Stored as 0|1 to match the wire protocol (RFC: mention-three-state v1).
+   */
+  humans?: number;
+  ais?: number;
 }
+
+// Sentinel uids used by the @-dropdown sticky top items + voice transcription.
+// `-1` is the legacy "@所有人" (all=1). `-2` / `-3` are the new three-state items.
+const MENTION_UID_LEGACY_ALL = "-1";
+const MENTION_UID_HUMANS = "-2";
+const MENTION_UID_AIS = "-3";
+const MENTION_LABEL_HUMANS = "所有人";
+const MENTION_LABEL_AIS = "所有AI";
 
 // 解析 @[uid:name] 格式的 mention
 function formatMentionTextV2(text: string): {
@@ -245,6 +265,8 @@ function formatMentionTextV2(text: string): {
   let result = "";
   let cursor = 0;
   let all = false;
+  let humans = false;
+  let ais = false;
 
   const placeholderPattern = /@\[([^:]+):([^\]]+)\]/g;
   let match;
@@ -256,19 +278,24 @@ function formatMentionTextV2(text: string): {
     // 添加 match 之前的普通文本
     result += text.slice(cursor, match.index);
 
-    // 计算当前 @ 符号的实际位置
-    const atName =
-      uid === "-1"
-        ? "@所有人"
-        : membersRef.current?.find((m) => m.uid === uid)?.name
+    if (uid === MENTION_UID_LEGACY_ALL) {
+      // 老的 @所有人 输入路径继续走 mention.all=1（server 端会 rewrite 成 humans=1）
+      all = true;
+      result += `@${MENTION_LABEL_HUMANS}`;
+    } else if (uid === MENTION_UID_HUMANS) {
+      // 新的三态：humans=1，文本插入 @所有人，不进 entities 列表
+      humans = true;
+      result += `@${MENTION_LABEL_HUMANS}`;
+    } else if (uid === MENTION_UID_AIS) {
+      // 新的三态：ais=1，文本插入 @所有AI，不进 entities 列表
+      ais = true;
+      result += `@${MENTION_LABEL_AIS}`;
+    } else {
+      // 普通成员：以最新的 member.name 优先（avoid stale display label），fallback to label。
+      const atName = membersRef.current?.find((m) => m.uid === uid)?.name
         ? `@${membersRef.current.find((m) => m.uid === uid)!.name}`
         : `@${name}`;
-    const offset = result.length;
-
-    if (uid === "-1") {
-      all = true;
-      result += "@所有人";
-    } else {
+      const offset = result.length;
       uids.push(uid);
       entities.push({
         uid,
@@ -284,11 +311,13 @@ function formatMentionTextV2(text: string): {
   // 添加剩余文本
   result += text.slice(cursor);
 
-  if (all || entities.length > 0) {
+  if (all || humans || ais || entities.length > 0) {
     const mention = new MentionModel();
     mention.all = all;
     mention.uids = uids.length > 0 ? uids : undefined;
     mention.entities = entities.length > 0 ? entities : undefined;
+    if (humans) mention.humans = 1;
+    if (ais) mention.ais = 1;
     return { content: result, mention };
   }
 
@@ -612,16 +641,28 @@ const MessageInput: React.FC<MessageInputProps> = (props) => {
         },
         suggestion: createMentionSuggestion(
           ({ query }) => {
-            if (!localMembersRef.current)
-              return [
-                {
-                  uid: "-1",
-                  name: "所有人",
-                  icon: mentionAllIcon,
-                  isBot: false,
-                  sourceSpaceName: "",
-                },
-              ];
+            // 三态 mention 顶部两个固定项：
+            //   - @所有人  → mention.humans=1
+            //   - @所有AI → mention.ais=1
+            // 始终置顶展示，不受 query 过滤影响。
+            const stickyTop = [
+              {
+                uid: MENTION_UID_HUMANS,
+                name: MENTION_LABEL_HUMANS,
+                icon: mentionAllIcon,
+                isBot: false,
+                sourceSpaceName: "",
+              },
+              {
+                uid: MENTION_UID_AIS,
+                name: MENTION_LABEL_AIS,
+                icon: mentionAllIcon,
+                isBot: true,
+                sourceSpaceName: "",
+              },
+            ];
+
+            if (!localMembersRef.current) return stickyTop;
 
             const items = localMembersRef.current.map((member) => {
               // @选人弹窗按当前查看 Space 相对显示「@SpaceName」。
@@ -644,17 +685,12 @@ const MessageInput: React.FC<MessageInputProps> = (props) => {
               };
             });
 
-            items.unshift({
-              uid: "-1",
-              name: "所有人",
-              icon: mentionAllIcon,
-              isBot: false,
-              sourceSpaceName: "",
-            });
-
-            return items.filter((item) =>
+            const filteredMembers = items.filter((item) =>
               item.name.toLowerCase().includes(query.toLowerCase())
             );
+
+            // sticky top 永远展示，即使被搜索 query 过滤也保留；置于成员列表上方。
+            return [...stickyTop, ...filteredMembers];
           },
           (active) => {
             mentionActiveRef.current = active;

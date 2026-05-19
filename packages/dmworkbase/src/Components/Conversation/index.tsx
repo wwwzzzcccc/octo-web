@@ -1052,13 +1052,49 @@ export class Conversation
   }
 
   getMessageMentions(message: MessageWrap): MentionInfo[] {
-    return (
+    const baseMentions: MentionInfo[] =
       message.parts
         ?.filter(
           (part: Part) => part.type === PartType.mention && part.data?.uid,
         )
-        .map((part: Part) => ({ name: part.text, uid: part.data.uid })) ?? []
-    );
+        .map((part: Part) => ({ name: part.text, uid: part.data.uid })) ?? [];
+
+    // ── 三态 mention 高亮（render matrix） ───────────────────────────
+    // 在普通 @member 的 Parts 之外，额外注入以下三个虚拟 highlight token，
+    // 让 MarkdownContent 用现有 @member 高亮样式（uid='all' → mention-highlight）
+    // 标亮文本中的 "@所有人" / "@所有AI":
+    //   - mention.humans=1  → "@所有人"
+    //   - mention.ais=1     → "@所有AI"
+    //   - mention.humans=1 + mention.ais=1 → 两者都高亮
+    //   - mention.all=1 (legacy / server outbound 双写) → "@所有人"
+    // 不动 message.parts，避免影响 markdown 子节点分段；MarkdownContent
+    // 按 name 字符串匹配文本节点。复用同一份 highlight class 保持视觉一致。
+    const content: any = message.content;
+    const mn = content?.mention;
+    const contentObjMn = content?.contentObj?.mention;
+    const humans = mn?.humans ?? contentObjMn?.humans;
+    const ais = mn?.ais ?? contentObjMn?.ais;
+    const all = mn?.all === true || mn?.all === 1;
+
+    const highlightAll = !!humans || all;
+    const highlightAis = !!ais;
+
+    const synthetic: MentionInfo[] = [];
+    if (highlightAll) {
+      synthetic.push({ name: "@所有人", uid: "all" });
+    }
+    if (highlightAis) {
+      synthetic.push({ name: "@所有AI", uid: "all" });
+    }
+
+    const seen = new Set(baseMentions.map((m) => m.name));
+    for (const s of synthetic) {
+      if (!seen.has(s.name)) {
+        baseMentions.push(s);
+        seen.add(s.name);
+      }
+    }
+    return baseMentions;
   }
 
   getMessageEmojis(message: MessageWrap): EmojiInfo[] {
@@ -2360,17 +2396,42 @@ export class Conversation
                             const mn = new Mention();
                             mn.all = blockMention.all;
                             mn.uids = blockMention.uids;
+                            // 三态 mention：SDK Mention 类型未声明 humans/ais，
+                            // 这里用 (mn as any) 把字段透传到 wire JSON。客户端
+                            // render 只读 contentObj.mention（下方 override 注入），
+                            // server 同时认 mn.humans/mn.ais（PR-A 已支持）。
+                            if (blockMention.humans) {
+                              (mn as any).humans = blockMention.humans;
+                            }
+                            if (blockMention.ais) {
+                              (mn as any).ais = blockMention.ais;
+                            }
                             msgContent.mention = mn;
-                            if (
+
+                            const hasEntities =
                               blockMention.entities &&
-                              blockMention.entities.length > 0
-                            ) {
+                              blockMention.entities.length > 0;
+                            const hasThreeState =
+                              !!(blockMention.humans || blockMention.ais);
+
+                            if (hasEntities || hasThreeState) {
                               const entities = blockMention.entities;
                               if (!msgContent.contentObj)
                                 msgContent.contentObj = {};
                               if (!msgContent.contentObj.mention)
                                 msgContent.contentObj.mention = {};
-                              msgContent.contentObj.mention.entities = entities;
+                              if (hasEntities) {
+                                msgContent.contentObj.mention.entities =
+                                  entities;
+                              }
+                              if (blockMention.humans) {
+                                msgContent.contentObj.mention.humans =
+                                  blockMention.humans;
+                              }
+                              if (blockMention.ais) {
+                                msgContent.contentObj.mention.ais =
+                                  blockMention.ais;
+                              }
                               const originalEncode =
                                 msgContent.encode.bind(msgContent);
                               msgContent.encode = () => {
@@ -2379,7 +2440,15 @@ export class Conversation
                                   const str = new TextDecoder().decode(bytes);
                                   const obj = JSON.parse(str);
                                   if (!obj.mention) obj.mention = {};
-                                  obj.mention.entities = entities;
+                                  if (hasEntities) {
+                                    obj.mention.entities = entities;
+                                  }
+                                  if (blockMention.humans) {
+                                    obj.mention.humans = blockMention.humans;
+                                  }
+                                  if (blockMention.ais) {
+                                    obj.mention.ais = blockMention.ais;
+                                  }
                                   return new TextEncoder().encode(
                                     JSON.stringify(obj),
                                   );

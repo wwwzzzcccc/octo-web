@@ -657,3 +657,128 @@ describe('end-to-end: formatMentionTextV2 -> parseMentionWithEntities', () => {
         expect(parts![3].text).toBe('@陈皮皮');
     });
 });
+
+// ═════════════════════════════════════════════════════════════════
+// Three-state mention render matrix (PR-C / GH#58)
+//
+// Mirrors the production logic in:
+//   - packages/dmworkbase/src/Components/Conversation/index.tsx
+//     ::getMessageMentions  (synthesizes @所有人 / @所有AI MentionInfo entries
+//     so MarkdownContent applies the existing mention-highlight class)
+//
+// Matrix:
+//   humans=1                       → highlight @所有人
+//   ais=1                          → highlight @所有AI
+//   humans=1 + ais=1               → highlight @所有人 + @所有AI
+//   all=1 (legacy / server outbound double-write) → highlight @所有人
+// ═════════════════════════════════════════════════════════════════
+
+interface MentionInfo {
+    name: string
+    uid: string
+}
+
+interface RenderMention {
+    all?: boolean | number
+    humans?: number
+    ais?: number
+    uids?: string[]
+    entities?: MentionEntity[]
+}
+
+// Mirrors Conversation.getMessageMentions sticky-highlight logic.
+// MarkdownContent applies the @member highlight (mention-highlight class)
+// when MentionInfo.uid === 'all'. We reuse that style for three-state by
+// emitting synthetic MentionInfo entries.
+function buildMessageMentions(
+    baseParts: Array<{ type: PartType; text: string; data?: { uid?: string } }>,
+    mention?: RenderMention,
+): MentionInfo[] {
+    const base: MentionInfo[] = baseParts
+        .filter((p) => p.type === PartType.mention && p.data?.uid)
+        .map((p) => ({ name: p.text, uid: p.data!.uid! }))
+
+    if (!mention) return base
+
+    const all = mention.all === true || mention.all === 1
+    const highlightAll = !!mention.humans || all
+    const highlightAis = !!mention.ais
+
+    const synthetic: MentionInfo[] = []
+    if (highlightAll) synthetic.push({ name: '@所有人', uid: 'all' })
+    if (highlightAis) synthetic.push({ name: '@所有AI', uid: 'all' })
+
+    const seen = new Set(base.map((m) => m.name))
+    for (const s of synthetic) {
+        if (!seen.has(s.name)) {
+            base.push(s)
+            seen.add(s.name)
+        }
+    }
+    return base
+}
+
+describe('render matrix: three-state mention highlight (GH#58)', () => {
+    it('humans=1 only → highlights @所有人', () => {
+        const text = '通知 @所有人 准时集合'
+        const mentions = buildMessageMentions([], { humans: 1 })
+
+        const names = mentions.map((m) => m.name)
+        expect(names).toContain('@所有人')
+        expect(names).not.toContain('@所有AI')
+        // All synthesized highlights reuse the existing "@member" highlight
+        // pathway by setting uid='all' (mention-highlight class).
+        expect(mentions.every((m) => m.uid === 'all')).toBe(true)
+        // sanity: the literal "@所有人" text exists in the message body so
+        // MarkdownContent will actually match it.
+        expect(text.includes('@所有人')).toBe(true)
+    })
+
+    it('ais=1 only → highlights @所有AI', () => {
+        const text = '请 @所有AI 协助回答'
+        const mentions = buildMessageMentions([], { ais: 1 })
+
+        const names = mentions.map((m) => m.name)
+        expect(names).toContain('@所有AI')
+        expect(names).not.toContain('@所有人')
+        expect(mentions.every((m) => m.uid === 'all')).toBe(true)
+        expect(text.includes('@所有AI')).toBe(true)
+    })
+
+    it('humans=1 + ais=1 → highlights @所有人 + @所有AI', () => {
+        const text = '@所有人 + @所有AI 同步'
+        const mentions = buildMessageMentions([], { humans: 1, ais: 1 })
+
+        const names = mentions.map((m) => m.name)
+        expect(names).toContain('@所有人')
+        expect(names).toContain('@所有AI')
+        expect(mentions).toHaveLength(2)
+        expect(mentions.every((m) => m.uid === 'all')).toBe(true)
+    })
+
+    it('all=1 (legacy) → highlights @所有人 (server outbound rewrites all→humans, both must work)', () => {
+        const text = '@所有人 集合'
+        const mentions = buildMessageMentions([], { all: 1 })
+
+        const names = mentions.map((m) => m.name)
+        expect(names).toContain('@所有人')
+        expect(names).not.toContain('@所有AI')
+        expect(mentions[0].uid).toBe('all')
+    })
+
+    it('regression: undefined mention does not synthesize anything', () => {
+        const mentions = buildMessageMentions([], undefined)
+        expect(mentions).toHaveLength(0)
+    })
+
+    it('regression: @member parts coexist with synthetic @所有AI (no de-dup collision)', () => {
+        const parts = [
+            { type: PartType.mention, text: '@陈皮皮', data: { uid: 'uid_chen' } },
+        ]
+        const mentions = buildMessageMentions(parts, { ais: 1 })
+
+        expect(mentions).toHaveLength(2)
+        expect(mentions[0]).toEqual({ name: '@陈皮皮', uid: 'uid_chen' })
+        expect(mentions[1]).toEqual({ name: '@所有AI', uid: 'all' })
+    })
+})
