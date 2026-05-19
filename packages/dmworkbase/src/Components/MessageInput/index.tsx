@@ -249,11 +249,17 @@ export class MentionModel {
 
 // Sentinel uids used by the @-dropdown sticky top items + voice transcription.
 // `-1` is the legacy "@所有人" (all=1). `-2` / `-3` are the new three-state items.
-const MENTION_UID_LEGACY_ALL = "-1";
-const MENTION_UID_HUMANS = "-2";
-const MENTION_UID_AIS = "-3";
-const MENTION_LABEL_HUMANS = "所有人";
-const MENTION_LABEL_AIS = "所有AI";
+// The canonical definitions live in Utils/mentionRender so the shared
+// dropdown helper (`buildMentionDropdownItems`) and unit tests can reuse
+// them without an import cycle through this large editor module.
+import {
+  MENTION_UID_LEGACY_ALL,
+  MENTION_UID_HUMANS,
+  MENTION_UID_AIS,
+  MENTION_LABEL_HUMANS,
+  MENTION_LABEL_AIS,
+  buildMentionDropdownItems,
+} from "../../Utils/mentionRender";
 
 // 解析 @[uid:name] 格式的 mention
 function formatMentionTextV2(text: string): {
@@ -644,53 +650,24 @@ const MessageInput: React.FC<MessageInputProps> = (props) => {
             // 三态 mention 顶部两个固定项：
             //   - @所有人  → mention.humans=1
             //   - @所有AI → mention.ais=1
-            // 始终置顶展示，不受 query 过滤影响。
-            const stickyTop = [
-              {
-                uid: MENTION_UID_HUMANS,
-                name: MENTION_LABEL_HUMANS,
-                icon: mentionAllIcon,
-                isBot: false,
-                sourceSpaceName: "",
-              },
-              {
-                uid: MENTION_UID_AIS,
-                name: MENTION_LABEL_AIS,
-                icon: mentionAllIcon,
-                isBot: true,
-                sourceSpaceName: "",
-              },
-            ];
-
-            if (!localMembersRef.current) return stickyTop;
-
-            const items = localMembersRef.current.map((member) => {
-              // @选人弹窗按当前查看 Space 相对显示「@SpaceName」。
-              // 同 Space / 自己 / legacy 非外部 → 不显示 sourceSpaceName。
-              const ext = resolveExternalForViewer({
-                homeSpaceId: member.orgData?.home_space_id,
-                homeSpaceName: member.orgData?.home_space_name,
-                isExternalLegacy: member.orgData?.is_external,
-                sourceSpaceNameLegacy: member.orgData?.source_space_name,
-              });
-              return {
-                uid: member.uid,
-                name: member.name,
-                icon: WKApp.shared.avatarChannel(
-                  new Channel(member.uid, ChannelTypePerson)
+            // 只在 query 为空时置顶展示；query 非空时隐藏，避免 Enter
+            // 错误地把 @Bob 这种 query 选成 sticky @所有人（PR #59 回归）。
+            return buildMentionDropdownItems({
+              query,
+              members: localMembersRef.current,
+              iconResolver: (member) =>
+                WKApp.shared.avatarChannel(
+                  new Channel(member.uid, ChannelTypePerson),
                 ),
-                // 直接从 Subscriber.orgData 取，不依赖 channelInfo 缓存是否已热
-                isBot: member.orgData?.robot === 1,
-                sourceSpaceName: ext.isExternal ? ext.sourceSpaceName : "",
-              };
+              externalResolver: (member) =>
+                resolveExternalForViewer({
+                  homeSpaceId: member.orgData?.home_space_id,
+                  homeSpaceName: member.orgData?.home_space_name,
+                  isExternalLegacy: member.orgData?.is_external,
+                  sourceSpaceNameLegacy: member.orgData?.source_space_name,
+                }),
+              stickyIcon: mentionAllIcon,
             });
-
-            const filteredMembers = items.filter((item) =>
-              item.name.toLowerCase().includes(query.toLowerCase())
-            );
-
-            // sticky top 永远展示，即使被搜索 query 过滤也保留；置于成员列表上方。
-            return [...stickyTop, ...filteredMembers];
           },
           (active) => {
             mentionActiveRef.current = active;

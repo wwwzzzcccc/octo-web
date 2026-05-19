@@ -34,6 +34,10 @@ import {
 } from "../../Service/Const";
 import ConversationContext from "./context";
 import { subscriberDisplayName } from "../../Utils/displayName";
+import {
+  buildMessageMentions as buildMentionRenderInfo,
+  readMentionFlags,
+} from "../../Utils/mentionRender";
 import MessageInput, {
   MentionModel,
   MessageInputContext,
@@ -1052,13 +1056,6 @@ export class Conversation
   }
 
   getMessageMentions(message: MessageWrap): MentionInfo[] {
-    const baseMentions: MentionInfo[] =
-      message.parts
-        ?.filter(
-          (part: Part) => part.type === PartType.mention && part.data?.uid,
-        )
-        .map((part: Part) => ({ name: part.text, uid: part.data.uid })) ?? [];
-
     // ── 三态 mention 高亮（render matrix） ───────────────────────────
     // 在普通 @member 的 Parts 之外，额外注入以下三个虚拟 highlight token，
     // 让 MarkdownContent 用现有 @member 高亮样式（uid='all' → mention-highlight）
@@ -1069,32 +1066,25 @@ export class Conversation
     //   - mention.all=1 (legacy / server outbound 双写) → "@所有人"
     // 不动 message.parts，避免影响 markdown 子节点分段；MarkdownContent
     // 按 name 字符串匹配文本节点。复用同一份 highlight class 保持视觉一致。
-    const content: any = message.content;
-    const mn = content?.mention;
-    const contentObjMn = content?.contentObj?.mention;
-    const humans = mn?.humans ?? contentObjMn?.humans;
-    const ais = mn?.ais ?? contentObjMn?.ais;
-    const all = mn?.all === true || mn?.all === 1;
+    //
+    // Edited messages render text from `message.remoteExtra.contentEdit`
+    // (see `getMessageTextContent` below). The mention flags must be read
+    // from the same content source — otherwise an edited message whose
+    // edit text now contains `@所有人` / `@所有AI` (or removes them) would
+    // disagree with the highlight overlay. Prefer the edited content's
+    // mention flags when present, falling back to the original message
+    // content for non-edited messages or edits that did not re-emit flags.
+    const editContent: any = message.remoteExtra?.isEdit
+      ? message.remoteExtra?.contentEdit
+      : undefined;
+    const flags =
+      readMentionFlags(editContent) ?? readMentionFlags(message.content);
 
-    const highlightAll = !!humans || all;
-    const highlightAis = !!ais;
-
-    const synthetic: MentionInfo[] = [];
-    if (highlightAll) {
-      synthetic.push({ name: "@所有人", uid: "all" });
-    }
-    if (highlightAis) {
-      synthetic.push({ name: "@所有AI", uid: "all" });
-    }
-
-    const seen = new Set(baseMentions.map((m) => m.name));
-    for (const s of synthetic) {
-      if (!seen.has(s.name)) {
-        baseMentions.push(s);
-        seen.add(s.name);
-      }
-    }
-    return baseMentions;
+    return buildMentionRenderInfo(
+      message.parts as any,
+      flags,
+      PartType.mention as unknown as number,
+    ) as MentionInfo[];
   }
 
   getMessageEmojis(message: MessageWrap): EmojiInfo[] {
