@@ -77,7 +77,22 @@ export default defineConfig(({ mode }) => {
         },
         load(id) {
           if (id === '\0vitest-stub') {
-            return 'export default {}'
+            // Provide a comprehensive stub that won't throw when accessed
+            return `
+              const noop = () => {};
+              const noopFn = (...args) => args[args.length - 1] || noop;
+              const vi = new Proxy({}, { get: () => noop });
+              export { vi };
+              export const expect = new Proxy({}, { get: () => (...args) => new Proxy({}, { get: () => noop }) });
+              export const describe = noopFn;
+              export const it = noopFn;
+              export const test = noopFn;
+              export const beforeEach = noop;
+              export const afterEach = noop;
+              export const beforeAll = noop;
+              export const afterAll = noop;
+              export default {};
+            `
           }
         },
         configureServer(server) {
@@ -104,6 +119,15 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'build',
       sourcemap: false,
+      rollupOptions: {
+        // Prevent vitest/storybook test utilities from leaking into production bundle
+        external: [
+          'vitest',
+          /^@vitest\//,
+          /^@storybook\/(addon-vitest|test)/,
+          'expect-type',
+        ],
+      },
     },
     server: {
       port: 3000,
