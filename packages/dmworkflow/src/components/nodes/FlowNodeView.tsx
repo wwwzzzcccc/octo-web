@@ -1,7 +1,7 @@
 import React from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { FlowNodeConfig, NodeType } from "../../types/flow";
-import { CATEGORY_COLORS, catalogFor } from "../../utils/nodeCatalog";
+import { catalogFor, colorsFor } from "../../utils/nodeCatalog";
 
 interface FlowNodeData extends Record<string, unknown> {
   nodeType: NodeType;
@@ -18,6 +18,22 @@ const STATUS_GLYPH: Record<NonNullable<FlowNodeData["status"]>, string> = {
   cancelled: "⊘",
 };
 
+/** Short, single-line subtitle shown under the node label on the canvas. */
+function nodePreview(type: NodeType, config: FlowNodeConfig): string | null {
+  if (type === "action.shell") {
+    const cmd = (config.shellCommand ?? "").trim();
+    if (!cmd) return null;
+    const firstLine = cmd.split(/\r?\n/).find((l) => l.trim()) ?? cmd;
+    return firstLine.length > 30 ? `${firstLine.slice(0, 30)}…` : firstLine;
+  }
+  if (type === "action.github_status") {
+    const state = config.githubState ?? "pending";
+    const ctx = config.githubContext?.trim();
+    return ctx ? `${state} · ${ctx}` : state;
+  }
+  return null;
+}
+
 /**
  * Single canvas node renderer. Layout is the same for every category — the
  * category-specific affordances are color + icon + (optional) status glyph.
@@ -26,8 +42,9 @@ export default function FlowNodeView({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
   const entry = catalogFor(d.nodeType);
   const category = entry?.category ?? "action";
-  const color = CATEGORY_COLORS[category];
+  const color = colorsFor(d.nodeType, category);
   const label = d.config?.label || entry?.label || d.nodeType;
+  const preview = nodePreview(d.nodeType, d.config ?? {});
 
   // Triggers have no inbound handle; everything else has both.
   const isTrigger = category === "trigger";
@@ -57,6 +74,24 @@ export default function FlowNodeView({ data, selected }: NodeProps) {
           </span>
         )}
       </div>
+      {preview && (
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            fontWeight: 400,
+            fontFamily: d.nodeType === "action.shell" ? "monospace" : undefined,
+            opacity: 0.85,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            maxWidth: 220,
+          }}
+          title={preview}
+        >
+          {preview}
+        </div>
+      )}
       <Handle type="source" position={Position.Right} style={{ background: color.border }} />
     </div>
   );

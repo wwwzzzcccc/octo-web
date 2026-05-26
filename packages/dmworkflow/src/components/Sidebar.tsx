@@ -1,5 +1,5 @@
 import React from "react";
-import { NODE_CATALOG, CATEGORY_COLORS } from "../utils/nodeCatalog";
+import { NODE_CATALOG, colorsFor } from "../utils/nodeCatalog";
 import type { NodeCategory } from "../types/flow";
 
 const CATEGORY_LABEL: Record<NodeCategory, string> = {
@@ -41,7 +41,7 @@ export default function Sidebar() {
             {CATEGORY_LABEL[cat]}
           </div>
           {grouped[cat].map((entry) => {
-            const c = CATEGORY_COLORS[cat];
+            const c = colorsFor(entry.type, cat);
             return (
               <div
                 key={entry.type}

@@ -2,9 +2,11 @@ import React from "react";
 import { Button, Input } from "@douyinfe/semi-ui";
 import { IconClose } from "@douyinfe/semi-icons";
 import type { FlowNode, FlowNodeConfig } from "../types/flow";
-import { CATEGORY_COLORS, catalogFor } from "../utils/nodeCatalog";
+import { catalogFor, colorsFor } from "../utils/nodeCatalog";
 import ScriptConfig from "./configs/ScriptConfig";
 import HttpConfig from "./configs/HttpConfig";
+import ShellConfig from "./configs/ShellConfig";
+import GitHubStatusConfig from "./configs/GitHubStatusConfig";
 import ConditionConfig from "./configs/ConditionConfig";
 import WebhookConfig from "./configs/WebhookConfig";
 import CronConfig from "./configs/CronConfig";
@@ -24,7 +26,7 @@ interface Props {
 export default function NodeConfigPanel({ node, webhookUrl, onChange, onClose, onDelete }: Props) {
   if (!node) return null;
   const entry = catalogFor(node.type);
-  const color = CATEGORY_COLORS[entry?.category ?? "action"];
+  const color = colorsFor(node.type, entry?.category ?? "action");
 
   const patch = (p: Partial<FlowNodeConfig>) => onChange(node.id, p);
 
@@ -67,6 +69,10 @@ export default function NodeConfigPanel({ node, webhookUrl, onChange, onClose, o
 
         {node.type === "action.script" && <ScriptConfig config={node.config} onChange={patch} />}
         {node.type === "action.http" && <HttpConfig config={node.config} onChange={patch} />}
+        {node.type === "action.shell" && <ShellConfig config={node.config} onChange={patch} />}
+        {node.type === "action.github_status" && (
+          <GitHubStatusConfig config={node.config} onChange={patch} />
+        )}
         {node.type === "logic.condition" && <ConditionConfig config={node.config} onChange={patch} />}
         {node.type === "trigger.webhook" && (
           <WebhookConfig config={node.config} onChange={patch} webhookUrl={webhookUrl} />

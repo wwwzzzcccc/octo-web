@@ -14,9 +14,13 @@ export type NodeType =
   // actions
   | "action.script"
   | "action.http"
+  | "action.shell"
+  | "action.github_status"
   | "action.bot"
   // human (Phase 2 — disabled in palette)
   | "human.approval";
+
+export type GitHubStatusState = "pending" | "success" | "failure" | "error";
 
 export type NodeCategory = "trigger" | "logic" | "action" | "human";
 
@@ -37,6 +41,18 @@ export interface FlowNodeConfig {
   httpUrl?: string;
   httpHeaders?: Array<{ key: string; value: string }>;
   httpBody?: string;
+  // Action.shell
+  shellCommand?: string;
+  shellTimeout?: number;
+  shellEnv?: Array<{ key: string; value: string }>;
+  // Action.github_status
+  githubToken?: string;
+  githubRepo?: string;
+  githubSha?: string;
+  githubState?: GitHubStatusState;
+  githubContext?: string;
+  githubDescription?: string;
+  githubTargetUrl?: string;
   // Action.bot — Phase 2 placeholder
   botId?: string;
   botAction?: string;

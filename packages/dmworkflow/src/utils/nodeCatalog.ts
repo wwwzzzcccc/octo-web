@@ -64,6 +64,20 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     description: "发起 HTTP 调用",
   },
   {
+    type: "action.shell",
+    category: "action",
+    label: "Shell",
+    icon: "📟",
+    description: "执行 shell 命令",
+  },
+  {
+    type: "action.github_status",
+    category: "action",
+    label: "GitHub Status",
+    icon: "🔖",
+    description: "回写 GitHub commit status",
+  },
+  {
     type: "action.bot",
     category: "action",
     label: "Bot 动作",
@@ -92,3 +106,17 @@ export const CATEGORY_COLORS: Record<NodeCategory, { bg: string; border: string;
   action: { bg: "#E6F7EA", border: "#3FB964", text: "#1F8A45" },
   human: { bg: "#FFF1E0", border: "#FF8A1F", text: "#C45A00" },
 };
+
+/**
+ * Per-NodeType color override. When present, takes precedence over the
+ * category default — used to distinguish closely-related action nodes
+ * (e.g. shell vs github_status) at a glance.
+ */
+export const NODE_TYPE_COLORS: Partial<Record<NodeType, { bg: string; border: string; text: string }>> = {
+  "action.shell": { bg: "#E6FBF1", border: "#10B981", text: "#0F8A60" },
+  "action.github_status": { bg: "#E8F0FE", border: "#3B82F6", text: "#1D4FB3" },
+};
+
+export function colorsFor(type: NodeType, category: NodeCategory): { bg: string; border: string; text: string } {
+  return NODE_TYPE_COLORS[type] ?? CATEGORY_COLORS[category];
+}
