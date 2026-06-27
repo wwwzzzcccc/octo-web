@@ -22,8 +22,6 @@ interface AgentRuntime {
     status: string
     version: string
     device_id: number
-    device_name: string
-    device_info: string
     runtime_mode: string
     daemon_id: string
     metadata: string
@@ -165,22 +163,22 @@ function deviceOnline(group: DeviceGroup): boolean {
     return group.onlineCount > 0
 }
 
-// 老服务端 (响应无 devices map, 或 runtime.device_id 在 devices 里查不到的
-// 脏数据) 时, 从 runtime 自身的 device_info / metadata 合成一个 Device, 保证
-// runtime 不会因为缺设备记录而从左树消失. 新服务端正常路径不会走到这里.
+// 兜底: runtime 的 device_id 在 devices map 里查不到 (脏数据 / 设备记录缺失)
+// 时, 用 runtime 自身可得的信息合成一个最小 Device, 保证 runtime 不会从左树
+// 消失. 三层模型下机器信息 (hostname/os/arch) 归 device 表, runtime 行不再
+// 自带, 故合成设备名只能回退到 daemon_id. 新服务端正常路径 (device_id 命中
+// devices map) 不会走到这里.
 function synthDevice(rt: AgentRuntime): Device {
-    let info: Record<string, string> = {}
-    if (rt.device_info) { try { info = JSON.parse(rt.device_info) } catch {} }
     const meta = parseMetadata(rt.metadata)
     const cli = (meta?.cli_version as string) || ""
     return {
         device_id: rt.device_id || 0,
-        device_uuid: info.device_id || "",
+        device_uuid: "",
         daemon_id: rt.daemon_id || "",
-        name: rt.device_name || rt.daemon_id || "unknown",
-        os: info.os || "",
-        arch: info.arch || "",
-        os_version: info.os_version || "",
+        name: rt.daemon_id || "unknown",
+        os: "",
+        arch: "",
+        os_version: "",
         status: "",
         last_seen_at: "",
         components: cli ? [{ name: "octo-daemon", version: cli }] : [],

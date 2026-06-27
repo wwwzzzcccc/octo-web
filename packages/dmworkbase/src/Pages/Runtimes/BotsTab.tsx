@@ -119,12 +119,15 @@ export const BotsTab = forwardRef<BotsTabHandle, BotsTabProps>(function BotsTab(
       // stale: 切了 space (epoch) 或被更新的 loadRuntimes 请求超越 (seq) 都丢弃
       if (epoch !== spaceEpochRef.current || seq !== loadRuntimesSeqRef.current) return;
       const list = (env?.data?.runtimes ?? env?.runtimes ?? []) as any[];
+      // 机器名走 devices map (keyed by device.id) 取 hostname —— runtime 行不再
+      // 自带 device_name (三层模型: 机器信息归 device 表). 缺失/脏数据回退 daemon_id.
+      const devices = (env?.data?.devices ?? env?.devices ?? {}) as Record<string, { name?: string }>;
       setRuntimes(list.map(r => ({
         id: r.id,
         name: r.name || r.provider,
         provider: r.provider,
         daemon_id: r.daemon_id || '',
-        device_name: r.device_name || r.daemon_id || 'unknown',
+        device_name: devices[String(r.device_id)]?.name || r.daemon_id || 'unknown',
         status: r.status || 'unknown',
       })));
     } catch {
