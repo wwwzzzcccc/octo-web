@@ -2,6 +2,7 @@ import { Channel, ChannelTypeGroup, ChannelTypePerson, ConversationAction, WKSDK
 import WKApp from "../../App";
 import { SyncMessageOptions } from "../../Service/DataSource/DataProvider";
 import { MessageWrap } from "../../Service/Model";
+import { applyRemoteReactions } from "./reactionMerge";
 import { ProviderListener } from "../../Service/Provider";
 import { isConversationDisbanded } from "../../Utils/groupDisband";
 import { animateScroll, scroller } from 'react-scroll';
@@ -1348,14 +1349,10 @@ export default class ConversationVM extends ProviderListener {
         if (!remoteMessages || remoteMessages.length === 0) {
             return
         }
-        let changed = false
-        for (const remote of remoteMessages) {
-            const existing = this.findMessageWithMessageID(remote.messageID)
-            if (existing) {
-                existing.message.reactions = remote.reactions || []
-                changed = true
-            }
-        }
+        let changed = applyRemoteReactions(
+            remoteMessages,
+            (messageID) => this.findMessageWithMessageID(messageID),
+        )
         if (changed) {
             this.notifyListener()
         }
