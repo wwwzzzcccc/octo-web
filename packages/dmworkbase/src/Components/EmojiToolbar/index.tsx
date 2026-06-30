@@ -233,7 +233,7 @@ export class EmojiPanel extends Component<EmojiPanelProps, EmojiPanelState> {
         this.setState({ uploading: true })
         try {
             const uploaded = await WKApp.dataSource.commonDataSource.uploadSticker(file)
-            await WKApp.dataSource.commonDataSource.addSticker({ path: uploaded.path, format: uploaded.format })
+            await WKApp.dataSource.commonDataSource.addSticker({ path: uploaded.path, format: uploaded.format, handle: uploaded.handle })
             await this.requestStickers()
             if (!this.isUnmounted) {
                 this.setState({ category: STICKER_CATEGORY })

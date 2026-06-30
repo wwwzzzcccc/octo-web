@@ -512,13 +512,15 @@ export class CommonDataSource implements ICommonDataSource {
         // 空集合后端返回 {list:[]}（不再 404）。仍兜底为 {list:[]} 以防网络异常。
         return WKApp.apiClient.get(`sticker/user`).then((r) => ({ list: (r && r.list) || [] })).catch(() => ({ list: [] }))
     }
-    addSticker(req: { path: string; format: string; placeholder?: string }): Promise<StickerItem> {
+    addSticker(req: { path: string; format: string; placeholder?: string; handle?: string }): Promise<StickerItem> {
+        // req carries the upload handle from uploadSticker; forwarded verbatim so the
+        // server can prove `path` came from this user's type=sticker upload.
         return WKApp.apiClient.post(`sticker/user`, req)
     }
     deleteSticker(stickerId: string): Promise<void> {
         return WKApp.apiClient.delete(`sticker/user/${encodeURIComponent(stickerId)}`)
     }
-    async uploadSticker(file: File): Promise<{ path: string; format: string }> {
+    async uploadSticker(file: File): Promise<{ path: string; format: string; handle?: string }> {
         // 两步上传：1) 申请上传地址（扩展名由文件名推导，服务端限定 gif/png/jpg/jpeg/webp）；
         // 2) 直传文件本体。沿用本仓库既有的 multipart 上传约定（axios + token，
         // 与头像/群头像/机器人头像上传一致）。
@@ -553,7 +555,12 @@ export class CommonDataSource implements ICommonDataSource {
             throw new Error("sticker upload returned no path")
         }
         const format = String(data.ext || "").replace(/^\./, "").toLowerCase()
-        return { path, format }
+        // sticker_handle: HMAC upload handle proving this object came from THIS
+        // user's content-validated type=sticker upload. Thread it to addSticker.
+        // May be absent if the backend has no master key configured (it then
+        // falls back to its path-shape check), so keep it optional.
+        const handle: string | undefined = data.sticker_handle ? String(data.sticker_handle) : undefined
+        return { path, format, handle }
     }
     searchUser(keyword: string): Promise<any> {
         const spaceId = WKApp.shared.currentSpaceId

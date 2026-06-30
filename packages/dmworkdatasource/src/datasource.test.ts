@@ -237,7 +237,7 @@ describe("shouldAttachUploadToken (sticker upload same-origin guard)", () => {
 // http://localhost:3000/api/v1/ and jsdom's document origin is
 // http://localhost:3000, so same-origin == localhost:3000.
 describe("uploadSticker request routing (interceptor-bypass guard)", () => {
-    const stickerResp = { data: { path: "file/preview/sticker/u/x.png", ext: "png" } }
+    const stickerResp = { data: { path: "file/preview/sticker/u/x.png", ext: "png", sticker_handle: "h-abc" } }
     let cds: CommonDataSource
 
     beforeEach(() => {
@@ -268,5 +268,51 @@ describe("uploadSticker request routing (interceptor-bypass guard)", () => {
         // and the isolated client is given no token header at the call site
         const [, , cfg] = hoisted.isolatedPost.mock.calls[0]
         expect(cfg?.headers?.token).toBeUndefined()
+    })
+})
+
+// The upload handle (PR#508 follow-up): uploadSticker must surface the server's
+// `sticker_handle`, and addSticker must forward it so the server can prove the
+// path came from this user's content-validated type=sticker upload.
+describe("sticker upload handle passthrough", () => {
+    let cds: CommonDataSource
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        cds = new CommonDataSource()
+    })
+
+    const file = () => new File([new Uint8Array([1, 2, 3])], "x.png", { type: "image/png" })
+
+    it("uploadSticker returns the sticker_handle from the upload response", async () => {
+        hoisted.apiGet.mockResolvedValue({ url: "http://localhost:3000/file/upload?type=sticker" })
+        hoisted.sharedPost.mockResolvedValue({ data: { path: "file/preview/sticker/u/x.png", ext: "png", sticker_handle: "h-xyz" } })
+
+        const out = await cds.uploadSticker(file())
+
+        expect(out.path).toBe("file/preview/sticker/u/x.png")
+        expect(out.format).toBe("png")
+        expect(out.handle).toBe("h-xyz")
+    })
+
+    it("uploadSticker leaves handle undefined when the response omits sticker_handle (no master key)", async () => {
+        hoisted.apiGet.mockResolvedValue({ url: "http://localhost:3000/file/upload?type=sticker" })
+        hoisted.sharedPost.mockResolvedValue({ data: { path: "file/preview/sticker/u/x.png", ext: "png" } })
+
+        const out = await cds.uploadSticker(file())
+
+        expect(out.handle).toBeUndefined()
+    })
+
+    it("addSticker forwards the handle verbatim in the POST body", async () => {
+        hoisted.apiPost.mockResolvedValue({ sticker_id: "s1" })
+
+        await cds.addSticker({ path: "file/preview/sticker/u/x.png", format: "png", handle: "h-xyz" })
+
+        expect(hoisted.apiPost).toHaveBeenCalledWith("sticker/user", {
+            path: "file/preview/sticker/u/x.png",
+            format: "png",
+            handle: "h-xyz",
+        })
     })
 })

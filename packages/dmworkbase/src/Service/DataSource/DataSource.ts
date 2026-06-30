@@ -149,9 +149,11 @@ export interface ICommonDataSource {
     userStickers(): Promise<{ list: StickerItem[] }>
 
     /**
-     * 新增一张自定义贴纸（path 来自 uploadSticker）
+     * 新增一张自定义贴纸（path / handle 均来自 uploadSticker）。handle 是上传接口
+     * 返回的 HMAC 上传句柄，证明 path 确由本人经 type=sticker 上传产生；后端配置了
+     * master key 时为必填，缺失则被拒。
      */
-    addSticker(req: { path: string; format: string; placeholder?: string }): Promise<StickerItem>
+    addSticker(req: { path: string; format: string; placeholder?: string; handle?: string }): Promise<StickerItem>
 
     /**
      * 删除当前用户的一张自定义贴纸
@@ -160,10 +162,11 @@ export interface ICommonDataSource {
     deleteSticker(stickerId: string): Promise<void>
 
     /**
-     * 上传贴纸文件（type=sticker），返回存储 path 与格式
+     * 上传贴纸文件（type=sticker），返回存储 path、格式，以及后端签发的上传句柄
+     * handle（透传给 addSticker 做来源校验；后端未配置 master key 时可能缺省）。
      * @param file
      */
-    uploadSticker(file: File): Promise<{ path: string; format: string }>
+    uploadSticker(file: File): Promise<{ path: string; format: string; handle?: string }>
 
 
     /**
