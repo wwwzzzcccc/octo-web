@@ -22,6 +22,8 @@ import { latexToMathComponent } from './math.ts'
 /** Allowed URL schemes for DOCX hyperlinks (same policy as marks.ts). */
 const SAFE_HREF_SCHEMES = /^(?:https?|mailto|tel):/i
 function isSafeHref(url: string): boolean {
+  // Block UNC paths (\\server\share or //server/share) — NTLM credential leak vector.
+  if (/^\\\\/.test(url) || /^\/\//.test(url)) return false
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !SAFE_HREF_SCHEMES.test(url)) return false
   return true
 }

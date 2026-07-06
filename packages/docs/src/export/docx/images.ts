@@ -89,7 +89,13 @@ export async function resolveAndFetchImages(
       const resolved = urls.get(ref.attachId)
       if (resolved?.url) url = resolved.url
     }
-    if (!url && ref.src) url = ref.src
+    if (!url && ref.src) {
+      // Only fetch raw src URLs with safe schemes (https/http/data).
+      // Blocks file:, javascript:, and UNC paths that could beacon or leak credentials.
+      if (/^(?:https?:|data:)/i.test(ref.src)) {
+        url = ref.src
+      }
+    }
     if (url) {
       const key = ref.attachId || url
       fetchQueue.push({ url, key })
@@ -108,7 +114,11 @@ export async function resolveAndFetchImages(
           const res = await fetch(url, { signal: controller.signal })
           clearTimeout(timeoutId)
           if (!res.ok) return
+          // Cap image size at 10MB to prevent memory exhaustion from hostile images.
+          const contentLength = Number(res.headers.get('content-length')) || 0
+          if (contentLength > 10 * 1024 * 1024) return
           const buffer = await res.arrayBuffer()
+          if (buffer.byteLength > 10 * 1024 * 1024) return
           imageBuffers.set(key, buffer)
         } catch {
           clearTimeout(timeoutId)
