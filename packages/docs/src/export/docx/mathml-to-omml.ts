@@ -77,6 +77,24 @@ const RELATION_OPS = new Set([
   '⊂', // ⊂
 ])
 
+/**
+ * Binary arithmetic operators that terminate an n-ary body.
+ * For ∑ x + y = z, the body should be just `x`; `+ y = z` stays at top level.
+ */
+const BINARY_ARITH_OPS = new Set([
+  '+',
+  '-',
+  '×', // ×
+  '·', // ·
+  '÷', // ÷
+  '±', // ±
+  '∓', // ∓
+  '⊕', // ⊕
+  '⊗', // ⊗
+  '∧', // ∧
+  '∨', // ∨
+])
+
 /** Child *element* nodes (drops whitespace/text between pretty-printed tags). */
 function childElements(node: Element): Element[] {
   return (node.elements ?? []).filter((e) => e.type === 'element') as Element[]
@@ -136,6 +154,10 @@ function isLargeOpMo(node: Element | undefined): boolean {
 /** True if `node` is an `<mo>` that ends an n-ary operand body. */
 function isRelationMo(node: Element): boolean {
   return node.name === 'mo' && RELATION_OPS.has(textOf(node).trim())
+}
+
+function isBinaryArithMo(node: Element): boolean {
+  return node.name === 'mo' && BINARY_ARITH_OPS.has(textOf(node).trim())
 }
 
 interface NaryInfo {
@@ -204,7 +226,7 @@ function convertSequence(nodes: Element[]): string {
     if (nary) {
       const body: Element[] = []
       let j = i + 1
-      while (j < nodes.length && !isRelationMo(nodes[j])) {
+      while (j < nodes.length && !isRelationMo(nodes[j]) && !isBinaryArithMo(nodes[j])) {
         body.push(nodes[j])
         j++
       }
