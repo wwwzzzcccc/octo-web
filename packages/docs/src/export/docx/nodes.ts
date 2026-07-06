@@ -18,6 +18,13 @@ import {
 } from 'docx'
 import { convertInlineContent, iconPrefix } from './marks.ts'
 import { latexToMathComponent } from './math.ts'
+
+/** Allowed URL schemes for DOCX hyperlinks (same policy as marks.ts). */
+const SAFE_HREF_SCHEMES = /^(?:https?|mailto|tel):/i
+function isSafeHref(url: string): boolean {
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !SAFE_HREF_SCHEMES.test(url)) return false
+  return true
+}
 import { convertTable } from './tables.ts'
 import { getImageBuffer, getImageDimensions } from './images.ts'
 import { FONT_CODE, mapTextAlign } from './styles.ts'
@@ -379,7 +386,7 @@ function convertFileAttachment(node: MdNode, ctx: DocxContext): Paragraph {
     resolved?.fileName ||
     'attachment'
 
-  if (resolved?.url) {
+  if (resolved?.url && isSafeHref(resolved.url)) {
     return new Paragraph({
       children: [
         ...iconPrefix('📎'),
@@ -415,7 +422,7 @@ function convertBookmark(node: MdNode): Paragraph {
   const url = typeof node.attrs?.url === 'string' ? node.attrs.url : ''
   const title = (typeof node.attrs?.title === 'string' && node.attrs.title) || url
 
-  if (url) {
+  if (url && isSafeHref(url)) {
     return new Paragraph({
       children: [
         ...iconPrefix('🔗'),

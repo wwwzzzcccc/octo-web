@@ -136,13 +136,23 @@ export function buildRunOptionsFromMarks(marks: MarkDef[]): IRunOptions {
 }
 
 /**
- * Check if marks contain a link mark, and return its href.
+ * Allowed URL schemes for DOCX hyperlinks. Blocks javascript:, file:, data:,
+ * vbscript:, and UNC paths that could be injected via pasted content.
+ */
+const SAFE_HREF_SCHEMES = /^(?:https?|mailto|tel):/i
+
+/**
+ * Check if marks contain a link mark, and return its href (if safe).
+ * Returns null for unsafe schemes or non-string values.
  */
 export function extractLinkHref(marks: MarkDef[]): string | null {
   const linkMark = marks.find((m) => m.type === 'link')
   if (!linkMark) return null
   const href = linkMark.attrs?.href
-  return typeof href === 'string' ? href : null
+  if (typeof href !== 'string') return null
+  // Allow relative URLs (no scheme) and whitelisted schemes.
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href) && !SAFE_HREF_SCHEMES.test(href)) return null
+  return href
 }
 
 /**
