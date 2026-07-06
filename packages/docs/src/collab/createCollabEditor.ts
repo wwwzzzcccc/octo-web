@@ -13,7 +13,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider'
 import { IndexeddbPersistence } from 'y-indexeddb'
 
 import { buildDocumentName } from '../documentName/index.ts'
-import { WS_ENDPOINT } from '../config.ts'
+import { resolveCollabWsUrl } from '../config.ts'
 import { canEdit, type Role } from '../auth/roles.ts'
 import { getCollabToken, getCollabTokenEntry, disposeToken } from '../auth/collabToken.ts'
 import { cacheKey, clearDocCache as clearDocCacheOrdered, type DocScope } from '../offline/cache.ts'
@@ -68,7 +68,12 @@ export class CollabEditor {
   private readonly readyListeners = new Set<() => void>()
   private destroyed = false
 
-  private constructor(opts: CollabEditorOptions, initialRole: Role, initialEpoch: number) {
+  private constructor(
+    opts: CollabEditorOptions,
+    initialRole: Role,
+    initialEpoch: number,
+    wsUrl: string,
+  ) {
     const scope: DocScope = { uid: opts.uid, space: opts.space, folder: opts.folder, doc: opts.doc }
     this.documentName = buildDocumentName(opts.space, opts.folder, opts.doc)
     this.cacheKeyStr = cacheKey(scope)
@@ -82,8 +87,10 @@ export class CollabEditor {
       : new IndexeddbPersistence(this.cacheKeyStr, this.ydoc)
 
     // 3) provider — connect:false; we set initial editable then connect.
+    // WS origin is resolved from the collab-token response (backend-driven) — see
+    // resolveCollabWsUrl / create().
     this.provider = new HocuspocusProvider({
-      url: WS_ENDPOINT,
+      url: wsUrl,
       name: this.documentName,
       document: this.ydoc,
       token: () => getCollabToken(this.documentName),
@@ -174,7 +181,11 @@ export class CollabEditor {
   static async create(opts: CollabEditorOptions): Promise<CollabEditor> {
     const documentName = buildDocumentName(opts.space, opts.folder, opts.doc)
     const entry = await getCollabTokenEntry(documentName)
-    return new CollabEditor(opts, entry.role, entry.permission_epoch)
+    // The collab-token response is the single source of truth for the WS origin: the
+    // backend-issued `collabWsUrl` is required. resolveCollabWsUrl throws when it is absent, so a
+    // misconfigured backend fails loudly here instead of silently connecting to a placeholder.
+    const wsUrl = resolveCollabWsUrl(entry.collabWsUrl)
+    return new CollabEditor(opts, entry.role, entry.permission_epoch, wsUrl)
   }
 
   getRole(): Role {
