@@ -5,6 +5,7 @@
 // header; no auth code here.
 
 import { apiClient } from '../octoweb/index.ts'
+import axios from 'axios'
 import type { Role } from '../auth/roles.ts'
 
 export interface DocListItem {
@@ -174,4 +175,18 @@ export function deleteErrorKey(outcome: Exclude<DeleteOutcome, 'gone'>): string 
     default:
       return 'docs.doc.deleteFailed'
   }
+}
+/**
+ * Export a document as PDF via the backend Puppeteer renderer.
+ * Bypasses the APIClient wrapper because its post() drops responseType,
+ * which corrupts binary PDF data (U+FFFD replacement). The global axios
+ * interceptors still inject token/X-Space-Id/baseURL for auth.
+ */
+export async function exportDocPdf(docId: string): Promise<ArrayBuffer> {
+  const res = await axios.post<ArrayBuffer>(
+    `/docs/${docId}/export/pdf`,
+    undefined,
+    { responseType: 'arraybuffer' },
+  )
+  return res.data
 }

@@ -52,8 +52,7 @@ vi.mock('../comments/useCommentHighlights.ts', () => ({ useCommentHighlights: ()
 const { useMemberNamesMock } = vi.hoisted(() => ({
   useMemberNamesMock: vi.fn(() => new Map<string, string>()),
 }))
-vi.mock('../members/useMemberNames.ts', () => ({ useMemberNames: useMemberNamesMock }))
-vi.mock('./useDocDelete.ts', () => ({
+vi.mock('../members/useMemberNames.ts', () => ({ useMemberNames: useMemberNamesMock }))vi.mock('./useDocDelete.ts', () => ({
   useDocDelete: () => ({
     confirming: false,
     deleting: false,
@@ -75,8 +74,7 @@ beforeEach(() => {
   setWKApp(wk)
   exportSpy.mockClear()
   useMemberNamesMock.mockReset()
-  useMemberNamesMock.mockReturnValue(new Map<string, string>())
-  fakeEditor.storage.octoCommentHighlight = {}
+  useMemberNamesMock.mockReturnValue(new Map<string, string>())  fakeEditor.storage.octoCommentHighlight = {}
   // jsdom has no object-URL impl; the export handler creates + revokes one.
   ;(URL as unknown as { createObjectURL: () => string }).createObjectURL = () => 'blob:mock'
   ;(URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {}
@@ -134,7 +132,6 @@ describe('EditorShell — export filename uses the live title, not the stale pro
     // Export moved into the header ≡ "more" menu: open it, then trigger the export row.
     fireEvent.click(screen.getByTitle('docs.toolbar.more'))
     fireEvent.click(screen.getByText('docs.toolbar.exportMarkdown'))
-
     await waitFor(() => expect(exportSpy).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(createdAnchors.length).toBeGreaterThan(0))
     const a = createdAnchors[createdAnchors.length - 1]

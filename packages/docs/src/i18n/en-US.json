@@ -79,6 +79,9 @@
     "members": "Members",
     "more": "More",
     "exportMarkdown": "Export as Markdown",
+    "export": "Export",
+    "exportDocx": "Export as Word",
+    "exportPdf": "Export as PDF",
     "exportError": "Couldn't export this document. Please try again.",
     "exportSignedLinkNotice": "Note: images and attachments are signed links and may expire. Once expired, reopen the source document to fetch them again, or download them manually."
   },

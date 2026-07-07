@@ -15,6 +15,9 @@ import { useCommentHighlights } from '../comments/useCommentHighlights.ts'
 import { useDocDelete } from './useDocDelete.ts'
 import { useMemberNames } from '../members/useMemberNames.ts'
 import { exportDocToMarkdown, type MdNode } from '../export/markdown.ts'
+import { exportDocToDocx } from '../export/docx/index.ts'
+import { exportDocPdf } from '../pages/docsApi.ts'
+import { ExportMenu } from './ExportMenu.tsx'
 import { emojiGlyph } from './emoji.ts'
 import { colorFromId } from '../awareness/presence.ts'
 import { useEffect, useState, useRef, useCallback, type ReactNode } from 'react'
@@ -81,8 +84,7 @@ export interface EditorShellProps extends CollabEditorOptions {
    * shareable surface — showing the creator's legal name to any link holder is a privacy leak
    * (boss decision).
    */
-  creatorNicknameOnly?: boolean
-}
+  creatorNicknameOnly?: boolean}
 
 /**
  * Base file name (no extension) for the Markdown export: the current document title, trimmed,
@@ -254,8 +256,7 @@ function DocTitle({
 /** Page shell (frontend-design §3.1): title / toolbar / content / presence + right-side drawer. */
 export function EditorShell(props: EditorShellProps) {
   const { title, onBack, onExit, onTitleSaved, onDeleted, headerRight, onOpenInNewPage, moreMenuLeadItems, creatorNicknameOnly, ...collabOpts } =
-    props
-  const docId = props.docId
+    props  const docId = props.docId
   const { instance, ready, role, connState, terminal } = useCollabEditor(collabOpts)
   // The live document title, lifted out of DocTitle so the export filename uses the current
   // (fetched / edited) title rather than the initial `title` prop. Seeded from the prop, then
@@ -272,8 +273,7 @@ export function EditorShell(props: EditorShellProps) {
   const [ownerId, setOwnerId] = useState<string | undefined>(undefined)
   // Creation timestamp (RFC3339) for the "more" menu head's "Created on" line. Fetched from the
   // same per-doc GET as ownerId; stays undefined (row hidden) when the backend omits it.
-  const [createdAt, setCreatedAt] = useState<string | undefined>(undefined)
-  useEffect(() => {
+  const [createdAt, setCreatedAt] = useState<string | undefined>(undefined)  useEffect(() => {
     let cancelled = false
     getDoc(docId)
       .then((meta) => {
@@ -282,8 +282,7 @@ export function EditorShell(props: EditorShellProps) {
         if (typeof meta?.createdAt === 'string' && meta.createdAt) setCreatedAt(meta.createdAt)
       })
       .catch(() => {
-        /* non-fatal: owner badge + created-on row just won't show */
-      })
+        /* non-fatal: owner badge + created-on row just won't show */      })
     return () => {
       cancelled = true
     }
@@ -332,9 +331,7 @@ export function EditorShell(props: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [ownerId, names, creatorNicknameOnly])
-
-  // C4 (#5): reset the drawer whenever the document changes. The shell is keyed by docId in
+  }, [ownerId, names, creatorNicknameOnly])  // C4 (#5): reset the drawer whenever the document changes. The shell is keyed by docId in
   // DocsHome (so it already remounts), but this makes the reset explicit and robust if the key
   // strategy ever changes — open history on doc A, switch to doc B → drawer is closed, no stale A.
   useEffect(() => {
@@ -422,15 +419,56 @@ export function EditorShell(props: EditorShellProps) {
     }
   }, [instance, docId, currentTitle, exporting])
 
-  const togglePanel = useCallback(
+  const onExportDocx = useCallback(async () => {
+    const ed = instance?.editor
+    if (!ed || exporting) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      const blob = await exportDocToDocx(docId, ed.getJSON() as unknown as MdNode, { emojiGlyph })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${exportDownloadName(currentTitle)}.docx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError(t('docs.toolbar.exportError'))
+    } finally {
+      setExporting(false)
+    }
+  }, [instance, docId, currentTitle, exporting])
+
+  const onExportPdf = useCallback(async () => {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      const bytes = await exportDocPdf(docId)
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${exportDownloadName(currentTitle)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError(t('docs.toolbar.exportError'))
+    } finally {
+      setExporting(false)
+    }
+  }, [docId, currentTitle, exporting])  const togglePanel = useCallback(
     (panel: Exclude<DrawerPanel, null>) => setActivePanel((cur) => (cur === panel ? null : panel)),
     [],
   )
   const closePanel = useCallback(() => setActivePanel(null), [])
 
   if (terminal.kind !== 'none') {
-    return <DocTerminal title={title} kind={terminal.kind} onBack={onBack} />
-  }
+    return <DocTerminal title={title} kind={terminal.kind} onBack={onBack} />  }
 
   if (!instance) {
     return (
@@ -485,9 +523,7 @@ export function EditorShell(props: EditorShellProps) {
     : undefined
   // Creator name with fallback: resolved name → short uid → placeholder. Never blank, never crashes.
   const creatorDisplay =
-    creatorName || (ownerId ? ownerId.slice(0, 8) : t('docs.moreMenu.unknownCreator'))
-
-  return (
+    creatorName || (ownerId ? ownerId.slice(0, 8) : t('docs.moreMenu.unknownCreator'))  return (
     <div className="octo-doc octo-doc--editor octo-theme">
       <header className="octo-doc-header">
         {onBack && (
@@ -512,8 +548,7 @@ export function EditorShell(props: EditorShellProps) {
         />
         <div className="octo-doc-header-right">
           {headerRight}
-          <PresenceBar provider={instance.provider} connState={connState} synced={ready} />
-          {/* Comments are reader+ (everyone with access — "can see → can comment"). */}
+          <PresenceBar provider={instance.provider} connState={connState} synced={ready} />          {/* Comments are reader+ (everyone with access — "can see → can comment"). */}
           <button
             type="button"
             className={activePanel === 'comments' ? 'octo-tb-btn is-active' : 'octo-tb-btn'}
@@ -523,7 +558,13 @@ export function EditorShell(props: EditorShellProps) {
           >
             💬 {t('docs.toolbar.comments')}
           </button>
-          {manage && (
+          {/* Export dropdown: Markdown / Word / PDF (reader+ — anyone who can view can export). */}
+          <ExportMenu
+            disabled={exporting}
+            onExportMarkdown={() => void onExportMarkdown()}
+            onExportDocx={() => void onExportDocx()}
+            onExportPdf={() => void onExportPdf()}
+          />          {manage && (
             <button
               type="button"
               className={activePanel === 'members' ? 'octo-tb-btn is-active' : 'octo-tb-btn'}
@@ -540,8 +581,7 @@ export function EditorShell(props: EditorShellProps) {
             createdAt={createdAt}
             items={moreItems}
             dangerItem={deleteItem}
-          />
-        </div>
+          />        </div>
       </header>
 
       {/* Delete confirm + error banner (reuses the list's confirm/error pattern). */}
