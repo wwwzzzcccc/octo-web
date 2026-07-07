@@ -5,13 +5,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { DatePicker, Toast } from "@douyinfe/semi-ui";
+import { DatePicker, Toast, Tooltip } from "@douyinfe/semi-ui";
 import {
   CalendarDays,
   ChevronDown,
   Download,
   Filter,
-  LocateFixed,
   MoreHorizontal,
   Play,
   X,
@@ -22,14 +21,35 @@ import WKAvatar from "../WKAvatar";
 import WKButton from "../WKButton";
 import IconClick from "../IconClick";
 import ConversationContext from "../Conversation/context";
-import FileHelper from "../../Utils/filehelper";
 import { downloadFile } from "../../Utils/download";
 import { useI18n } from "../../i18n";
+import { getRichTextBlocksUI } from "../../bridge/message/useRichTextMessageUI";
+import MixedContent from "../../ui/message/MixedContent";
+import type { MixedContentBlock } from "../../ui/message/MixedContent";
 import { channelSearchEmptyDataSource } from "./adapter";
+import {
+  CHANNEL_SEARCH_KEYWORD_MAX_RUNES,
+  countChannelSearchKeywordRunes,
+  shouldRunSearch,
+  truncateChannelSearchKeyword,
+} from "./apiAdapter";
+import { resolveChannelSearchFileIconSrc } from "./fileIcon";
+import {
+  FORWARD_INNER_MESSAGE_DISPLAY_LIMIT,
+  formatForwardInnerMessage,
+  getForwardInnerMessageHiddenCount,
+} from "./forwardInnerMessage";
+import { activeChannelSearchFilterCount } from "./filterState";
 import {
   canLocateChannelSearchItem,
   resolveChannelSearchLocateTarget,
 } from "./locate";
+import {
+  isNearChannelSearchScrollBottom,
+  shouldPauseAutoPaginationForEmptyPage,
+  shouldStopPaginationForCursor,
+} from "./pagination";
+import ChannelSearchSnippetContent from "./snippetContent";
 import { defaultChannelSearchFilters } from "./types";
 import type {
   ChannelSearchDataSource,
@@ -50,6 +70,7 @@ interface ChannelSearchPanelProps {
   dataSource?: ChannelSearchDataSource;
   onLocateMessage?: (item: ChannelSearchItem) => void;
   onPreviewFile?: (item: ChannelSearchItem) => void;
+  onPreviewMedia?: (item: ChannelSearchItem) => void;
   initialState?: ChannelSearchPanelState;
   onStateChange?: (state: ChannelSearchPanelState) => void;
 }
@@ -76,14 +97,6 @@ function resolveSender(
   getSender: GetChannelSearchSender
 ): ChannelSearchSender {
   return item.sender || getSender(item.senderUid);
-}
-
-function activeFilterCount(filters: ChannelSearchFilters) {
-  return (
-    (filters.senderUids.length > 0 ? 1 : 0) +
-    (filters.sort !== "time_desc" ? 1 : 0) +
-    (filters.datePreset || filters.startAt || filters.endAt ? 1 : 0)
-  );
 }
 
 function startOfDay(date: Date) {
@@ -144,14 +157,6 @@ function compactFileSize(bytes: number) {
   return `${bytes}B`;
 }
 
-function assetUrl(value: unknown): string | undefined {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object" && "default" in value) {
-    return assetUrl((value as { default?: unknown }).default);
-  }
-  return undefined;
-}
-
 function useOutsideDismiss(
   open: boolean,
   getContainers: () => Array<HTMLElement | null | undefined>,
@@ -189,71 +194,6 @@ function useOutsideDismiss(
     };
   }, [getContainers, onDismiss, open, shouldIgnoreTarget]);
 }
-
-const HighlightText = React.memo(function HighlightText({
-  text = "",
-  keyword,
-}: {
-  text?: string;
-  keyword: string;
-}) {
-  const content = useMemo(() => {
-    if (/<\/?mark>/i.test(text)) {
-      const parts: React.ReactNode[] = [];
-      const pattern = /<mark>(.*?)<\/mark>/gi;
-      let cursor = 0;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(text))) {
-        if (match.index > cursor) {
-          parts.push(text.slice(cursor, match.index));
-        }
-        parts.push(
-          <mark
-            key={`${match.index}-${pattern.lastIndex}`}
-            className="wk-channel-search-highlight"
-          >
-            {match[1]}
-          </mark>
-        );
-        cursor = pattern.lastIndex;
-      }
-      if (cursor < text.length) {
-        parts.push(text.slice(cursor));
-      }
-      return parts;
-    }
-
-    const needle = keyword.trim();
-    if (!needle) return text;
-
-    const lowerText = text.toLowerCase();
-    const lowerNeedle = needle.toLowerCase();
-    const parts: React.ReactNode[] = [];
-    let cursor = 0;
-    let index = lowerText.indexOf(lowerNeedle);
-
-    while (index !== -1) {
-      if (index > cursor) {
-        parts.push(text.slice(cursor, index));
-      }
-      const end = index + needle.length;
-      parts.push(
-        <mark key={`${index}-${end}`} className="wk-channel-search-highlight">
-          {text.slice(index, end)}
-        </mark>
-      );
-      cursor = end;
-      index = lowerText.indexOf(lowerNeedle, cursor);
-    }
-
-    if (cursor < text.length) {
-      parts.push(text.slice(cursor));
-    }
-    return parts;
-  }, [keyword, text]);
-
-  return <>{content}</>;
-});
 
 const SenderAvatar: React.FC<{
   uid: string;
@@ -722,7 +662,128 @@ type ResultItemProps = {
   keyword: string;
   getSender: GetChannelSearchSender;
   onLocate: (item: ChannelSearchItem) => void;
+  onPreviewMedia?: (item: ChannelSearchItem) => void;
 };
+
+type LocateToChatIconProps = {
+  size?: number;
+};
+
+const LocateToChatIcon = React.memo(function LocateToChatIcon({
+  size = 16,
+}: LocateToChatIconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="wk-channel-search-locate-icon"
+      fill="none"
+      focusable="false"
+      height={size}
+      viewBox="0 0 16 16"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        clipRule="evenodd"
+        d="M14.3333 1.66675H3.66658V3.00008H12.9999V13.0001H3.66659V14.3334H14.3333V1.66675Z"
+        fill="currentColor"
+        fillRule="evenodd"
+      />
+      <path
+        d="M6.88572 11.496L5.94291 10.5532L7.82889 8.66726L1.39062 8.66726L1.39062 7.33393L7.82817 7.33393L5.94291 5.44867L6.88572 4.50586L10.3808 8.00095L6.88572 11.496Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+});
+
+type LocateIconButtonProps = {
+  className: string;
+  iconSize?: number;
+  onClick: () => void;
+};
+
+const LocateIconButton = React.memo(function LocateIconButton({
+  className,
+  iconSize,
+  onClick,
+}: LocateIconButtonProps) {
+  const { t } = useI18n();
+  const label = t("base.channelSearch.locateToChatPosition");
+
+  return (
+    <Tooltip content={label} position="top">
+      <button
+        aria-label={label}
+        className={className}
+        type="button"
+        onClick={onClick}
+      >
+        <LocateToChatIcon size={iconSize} />
+      </button>
+    </Tooltip>
+  );
+});
+
+const RichTextResultContent = React.memo(function RichTextResultContent({
+  item,
+  keyword,
+}: {
+  item: ChannelSearchItem;
+  keyword: string;
+}) {
+  const { t } = useI18n();
+  const richText = item.richText;
+  const blocks = useMemo(() => {
+    return getRichTextBlocksUI(richText?.content || [], {
+      entities: richText?.mention?.entities || [],
+      syntheticMentions: [],
+    });
+  }, [richText]);
+  const showMatchReason =
+    !!keyword.trim() &&
+    !!item.matchReason &&
+    item.matchReason !== richText?.plain;
+
+  const handleFileDownload = useCallback(
+    async (block: Extract<MixedContentBlock, { type: "file" }>) => {
+      if (!block.url) {
+        Toast.warning(t("base.channelSearch.downloadUnavailable"));
+        return;
+      }
+      try {
+        await downloadFile(block.url, block.name);
+      } catch (_) {
+        Toast.error(t("base.channelSearch.downloadFailed"));
+      }
+    },
+    [t]
+  );
+
+  if (blocks.length === 0) {
+    return (
+      <div className="wk-channel-search-result-text">
+        <ChannelSearchSnippetContent text={item.text} keyword={keyword} />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {showMatchReason && (
+        <div className="wk-channel-search-match-reason">
+          <ChannelSearchSnippetContent
+            text={item.matchReason}
+            keyword={keyword}
+          />
+        </div>
+      )}
+      <div className="wk-channel-search-richtext-preview">
+        <MixedContent blocks={blocks} onFileDownload={handleFileDownload} />
+      </div>
+    </>
+  );
+});
 
 const MessageResultItem = React.memo(function MessageResultItem({
   item,
@@ -733,6 +794,22 @@ const MessageResultItem = React.memo(function MessageResultItem({
   const { format, t } = useI18n();
   const sender = resolveSender(item, getSender);
   const isForward = item.kind === "merge_forward";
+  const forwardInnerMessages = item.forward?.innerMessages || [];
+  const visibleForwardInnerMessages = forwardInnerMessages.slice(
+    0,
+    FORWARD_INNER_MESSAGE_DISPLAY_LIMIT
+  );
+  const hiddenForwardInnerMessageCount = getForwardInnerMessageHiddenCount(
+    forwardInnerMessages.length,
+    visibleForwardInnerMessages.length,
+    item.forward?.childCount
+  );
+  const forwardMatchReason =
+    isForward && keyword.trim()
+      ? t("base.channelSearch.forward.matchReason", {
+          values: { keyword: keyword.trim() },
+        })
+      : item.matchReason;
 
   return (
     <div className="wk-channel-search-result wk-channel-search-message-result">
@@ -756,11 +833,14 @@ const MessageResultItem = React.memo(function MessageResultItem({
         {isForward ? (
           <>
             <div className="wk-channel-search-match-reason">
-              <HighlightText text={item.matchReason} keyword={keyword} />
+              <ChannelSearchSnippetContent
+                text={forwardMatchReason}
+                keyword={keyword}
+              />
             </div>
             <div className="wk-channel-search-forward-card">
               <div className="wk-channel-search-forward-title">
-                <HighlightText
+                <ChannelSearchSnippetContent
                   text={
                     item.forward?.title ||
                     t("base.channelSearch.forward.defaultTitle")
@@ -768,15 +848,38 @@ const MessageResultItem = React.memo(function MessageResultItem({
                   keyword={keyword}
                 />
               </div>
-              {item.forward?.snippets.map((snippet) => (
+              {visibleForwardInnerMessages.map((message, index) => (
                 <div
-                  key={snippet}
+                  key={`${message.messageId || "inner"}-${index}`}
                   className="wk-channel-search-forward-snippet"
                 >
-                  <HighlightText text={snippet} keyword={keyword} />
+                  <ChannelSearchSnippetContent
+                    text={formatForwardInnerMessage(message, getSender, t)}
+                    keyword={keyword}
+                  />
                 </div>
               ))}
-              {item.forward?.snippets.length === 0 &&
+              {hiddenForwardInnerMessageCount > 0 && (
+                <div className="wk-channel-search-forward-snippet">
+                  {t("base.channelSearch.forward.more", {
+                    values: { count: hiddenForwardInnerMessageCount },
+                  })}
+                </div>
+              )}
+              {visibleForwardInnerMessages.length === 0 &&
+                item.forward?.snippets.map((snippet) => (
+                  <div
+                    key={snippet}
+                    className="wk-channel-search-forward-snippet"
+                  >
+                    <ChannelSearchSnippetContent
+                      text={snippet}
+                      keyword={keyword}
+                    />
+                  </div>
+                ))}
+              {visibleForwardInnerMessages.length === 0 &&
+                item.forward?.snippets.length === 0 &&
                 !!item.forward?.childCount && (
                   <div className="wk-channel-search-forward-snippet">
                     {t("base.channelSearch.forward.childCount", {
@@ -787,9 +890,7 @@ const MessageResultItem = React.memo(function MessageResultItem({
             </div>
           </>
         ) : (
-          <div className="wk-channel-search-result-text">
-            <HighlightText text={item.text} keyword={keyword} />
-          </div>
+          <RichTextResultContent item={item} keyword={keyword} />
         )}
       </div>
       {canLocateChannelSearchItem(item) && (
@@ -810,6 +911,7 @@ const MixedResultItem = React.memo(function MixedResultItem({
   keyword,
   getSender,
   onLocate,
+  onPreviewMedia,
 }: ResultItemProps) {
   if (item.kind === "file") {
     return (
@@ -828,6 +930,7 @@ const MixedResultItem = React.memo(function MixedResultItem({
         keyword={keyword}
         getSender={getSender}
         onLocate={onLocate}
+        onPreviewMedia={onPreviewMedia}
       />
     );
   }
@@ -846,6 +949,7 @@ const MediaInlineResult = React.memo(function MediaInlineResult({
   keyword,
   getSender,
   onLocate,
+  onPreviewMedia,
 }: ResultItemProps) {
   const { format, t } = useI18n();
   const sender = resolveSender(item, getSender);
@@ -869,9 +973,17 @@ const MediaInlineResult = React.memo(function MediaInlineResult({
           </span>
         </div>
         <div className="wk-channel-search-match-reason">
-          <HighlightText text={item.matchReason} keyword={keyword} />
+          <ChannelSearchSnippetContent
+            text={item.matchReason}
+            keyword={keyword}
+          />
         </div>
-        <MediaThumb item={item} onLocate={onLocate} compact />
+        <MediaThumb
+          item={item}
+          onLocate={onLocate}
+          onPreviewMedia={onPreviewMedia}
+          compact
+        />
       </div>
       {canLocateChannelSearchItem(item) && (
         <button
@@ -889,17 +1001,29 @@ const MediaInlineResult = React.memo(function MediaInlineResult({
 type MediaThumbProps = {
   item: ChannelSearchItem;
   onLocate: (item: ChannelSearchItem) => void;
+  onPreviewMedia?: (item: ChannelSearchItem) => void;
   compact?: boolean;
 };
 
 const MediaThumb = React.memo(function MediaThumb({
   item,
   onLocate,
+  onPreviewMedia,
   compact = false,
 }: MediaThumbProps) {
+  const { t } = useI18n();
   const thumbUrl = compact
     ? item.media?.inlineThumbUrl || item.media?.thumbUrl
     : item.media?.thumbUrl;
+  const previewLabel = t("base.filePreview.preview");
+  const canPreviewMedia =
+    !!onPreviewMedia &&
+    !!(
+      item.media?.previewUrl ||
+      item.media?.url ||
+      item.media?.downloadUrl ||
+      (item.kind === "image" && item.media?.thumbUrl)
+    );
 
   return (
     <div
@@ -907,25 +1031,40 @@ const MediaThumb = React.memo(function MediaThumb({
         "wk-channel-search-media-thumb",
         `wk-channel-search-media-thumb--${item.media?.tone || "warm"}`,
         thumbUrl ? "wk-channel-search-media-thumb--image" : "",
+        canPreviewMedia ? "wk-channel-search-media-thumb--previewable" : "",
         compact ? "wk-channel-search-media-thumb--compact" : "",
       ]
         .filter(Boolean)
         .join(" ")}
-      style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined}
     >
+      {thumbUrl && (
+        <img
+          alt=""
+          className="wk-channel-search-media-thumb-img"
+          draggable={false}
+          src={thumbUrl}
+        />
+      )}
+      {canPreviewMedia && (
+        <button
+          aria-label={previewLabel}
+          className="wk-channel-search-media-preview-trigger"
+          title={previewLabel}
+          type="button"
+          onClick={() => onPreviewMedia(item)}
+        />
+      )}
       {item.kind === "video" && (
         <div className="wk-channel-search-media-play">
           <Play size={18} fill="currentColor" />
         </div>
       )}
       {canLocateChannelSearchItem(item) && (
-        <button
+        <LocateIconButton
           className="wk-channel-search-media-locate"
-          type="button"
+          iconSize={16}
           onClick={() => onLocate(item)}
-        >
-          <LocateFixed size={16} />
-        </button>
+        />
       )}
     </div>
   );
@@ -941,8 +1080,10 @@ const FileInlineResult = React.memo(function FileInlineResult({
   const sender = resolveSender(item, getSender);
   const fileName = item.file?.name || t("base.conversation.file.unknown");
   const inlineFileName = fileName.replace(/\.[^.]+$/, "");
-  const fileIconInfo = FileHelper.getFileIconInfo(fileName);
-  const fileIconSrc = item.file?.iconUrl || assetUrl(fileIconInfo?.icon);
+  const fileIconSrc = resolveChannelSearchFileIconSrc(
+    fileName,
+    item.file?.extension
+  );
 
   return (
     <div className="wk-channel-search-result wk-channel-search-file-inline">
@@ -965,11 +1106,14 @@ const FileInlineResult = React.memo(function FileInlineResult({
         </div>
         <div className="wk-channel-search-inline-file-card">
           <div className="wk-channel-search-inline-file-icon">
-            {fileIconSrc && <img src={fileIconSrc} alt="" />}
+            <img src={fileIconSrc} alt="" />
           </div>
           <div className="wk-channel-search-inline-file-body">
             <div className="wk-channel-search-inline-file-name">
-              <HighlightText text={inlineFileName} keyword={keyword} />
+              <ChannelSearchSnippetContent
+                text={inlineFileName}
+                keyword={keyword}
+              />
             </div>
             <div className="wk-channel-search-inline-file-size">
               {compactFileSize(item.file?.size || 0)}
@@ -993,11 +1137,13 @@ const FileInlineResult = React.memo(function FileInlineResult({
 type MediaResultGridProps = {
   items: ChannelSearchItem[];
   onLocate: (item: ChannelSearchItem) => void;
+  onPreviewMedia?: (item: ChannelSearchItem) => void;
 };
 
 const MediaResultGrid = React.memo(function MediaResultGrid({
   items,
   onLocate,
+  onPreviewMedia,
 }: MediaResultGridProps) {
   const grouped = useMemo(() => {
     return items.reduce<Record<string, ChannelSearchItem[]>>((acc, item) => {
@@ -1015,7 +1161,12 @@ const MediaResultGrid = React.memo(function MediaResultGrid({
           <div className="wk-channel-search-media-month">{label}</div>
           <div className="wk-channel-search-media-grid">
             {groupItems.map((item) => (
-              <MediaThumb key={item.id} item={item} onLocate={onLocate} />
+              <MediaThumb
+                key={item.id}
+                item={item}
+                onLocate={onLocate}
+                onPreviewMedia={onPreviewMedia}
+              />
             ))}
           </div>
         </section>
@@ -1047,9 +1198,10 @@ const FileResultItem = React.memo(function FileResultItem({
   const menuRef = useRef<HTMLDivElement>(null);
   const sender = resolveSender(item, getSender);
   const fileName = item.file?.name || t("base.conversation.file.unknown");
-  const fileIconInfo = FileHelper.getFileIconInfo(fileName);
-  const fileIconSrc = item.file?.iconUrl || assetUrl(fileIconInfo?.icon);
-  const hasFigmaIcon = !!item.file?.iconUrl;
+  const fileIconSrc = resolveChannelSearchFileIconSrc(
+    fileName,
+    item.file?.extension
+  );
 
   const handleDownload = async () => {
     const url = item.file?.downloadUrl || item.file?.url;
@@ -1083,22 +1235,12 @@ const FileResultItem = React.memo(function FileResultItem({
         }
       }}
     >
-      <div
-        className={[
-          "wk-channel-search-file-icon",
-          hasFigmaIcon ? "wk-channel-search-file-icon--figma" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={{
-          backgroundColor: hasFigmaIcon ? undefined : fileIconInfo?.color,
-        }}
-      >
-        {fileIconSrc && <img src={fileIconSrc} alt="" />}
+      <div className="wk-channel-search-file-icon">
+        <img src={fileIconSrc} alt="" />
       </div>
       <div className="wk-channel-search-file-body">
         <div className="wk-channel-search-file-name">
-          <HighlightText text={fileName} keyword={keyword} />
+          <ChannelSearchSnippetContent text={fileName} keyword={keyword} />
         </div>
         <div className="wk-channel-search-file-meta">
           <span>{sender.name}</span>
@@ -1137,7 +1279,7 @@ const FileResultItem = React.memo(function FileResultItem({
                   onLocate(item);
                 }}
               >
-                <LocateFixed size={14} />
+                <LocateToChatIcon size={14} />
                 {t("base.channelSearch.locateToChatPosition")}
               </button>
             )}
@@ -1181,11 +1323,14 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
   dataSource = channelSearchEmptyDataSource,
   onLocateMessage,
   onPreviewFile,
+  onPreviewMedia,
   initialState,
   onStateChange,
 }) => {
   const { t } = useI18n();
-  const [keyword, setKeyword] = useState(initialState?.keyword || "");
+  const [keyword, setKeyword] = useState(() =>
+    truncateChannelSearchKeyword(initialState?.keyword || "")
+  );
   const [activeTab, setActiveTab] = useState<ChannelSearchTab>(
     initialState?.activeTab || "all"
   );
@@ -1202,11 +1347,22 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
   const [loadingMore, setLoadingMore] = useState(false);
   const [queryStarted, setQueryStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paginationError, setPaginationError] = useState<string | null>(null);
+  const [autoPaginationPaused, setAutoPaginationPaused] = useState(false);
   const requestIdRef = useRef(0);
+  const loadingMoreCursorRef = useRef<string | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const keywordLimitToastShownRef = useRef(false);
+  const isComposingRef = useRef(false);
   const [isComposing, setIsComposing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const filterWrapRef = useRef<HTMLDivElement>(null);
 
-  const filterCount = activeFilterCount(filters);
+  const filterCount = activeChannelSearchFilterCount(filters);
+  const keywordRuneCount = countChannelSearchKeywordRunes(keyword);
+  const keywordAtLimit =
+    !isComposing && keywordRuneCount >= CHANNEL_SEARCH_KEYWORD_MAX_RUNES;
+  const canSearch = shouldRunSearch({ keyword, filters, tab: activeTab });
   const getSender = useCallback(
     (uid: string) => dataSource.getSender(uid),
     [dataSource]
@@ -1218,6 +1374,27 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
   const closeFilterPopover = useCallback(() => {
     setFilterOpen(false);
   }, []);
+  const updateKeyword = useCallback(
+    (value: string) => {
+      const runeCount = countChannelSearchKeywordRunes(value);
+      const exceedsLimit = runeCount > CHANNEL_SEARCH_KEYWORD_MAX_RUNES;
+
+      if (exceedsLimit && !keywordLimitToastShownRef.current) {
+        Toast.warning(
+          t("base.channelSearch.keywordLimitToast", {
+            values: { count: CHANNEL_SEARCH_KEYWORD_MAX_RUNES },
+          })
+        );
+        keywordLimitToastShownRef.current = true;
+      }
+      if (!exceedsLimit && runeCount < CHANNEL_SEARCH_KEYWORD_MAX_RUNES) {
+        keywordLimitToastShownRef.current = false;
+      }
+
+      setKeyword(truncateChannelSearchKeyword(value));
+    },
+    [t]
+  );
   const shouldKeepSemiPopupOpen = useCallback((target: Node) => {
     return (
       target instanceof Element &&
@@ -1246,14 +1423,27 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
       if (isComposing) {
         return;
       }
+      if (cursor && loadingMoreCursorRef.current === cursor) {
+        return;
+      }
 
+      // Empty all/message searches are only sent once keyword or filters exist.
+      // Media/file tabs browse without a keyword, which shouldRunSearch encodes.
+      if (!shouldRunSearch({ keyword, filters, tab: activeTab })) {
+        return;
+      }
+
+      loadingMoreCursorRef.current = cursor || null;
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setQueryStarted(true);
-      setError(null);
       if (cursor) {
+        setPaginationError(null);
         setLoadingMore(true);
       } else {
+        setError(null);
+        setPaginationError(null);
+        setAutoPaginationPaused(false);
         setLoading(true);
       }
 
@@ -1268,39 +1458,137 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
           limit: 20,
         });
         if (requestIdRef.current !== requestId) return;
+        const stopPagination = shouldStopPaginationForCursor({
+          hasMore: next.hasMore,
+          nextCursor: next.nextCursor,
+          requestedCursor: cursor,
+        });
+        const pauseAutoPagination = shouldPauseAutoPaginationForEmptyPage({
+          hasMore: next.hasMore,
+          itemCount: next.items.length,
+          nextCursor: next.nextCursor,
+          requestedCursor: cursor,
+        });
+        setAutoPaginationPaused(pauseAutoPagination);
         setResponse((prev) => ({
           items: cursor ? [...prev.items, ...next.items] : next.items,
-          nextCursor: next.nextCursor,
-          hasMore: next.hasMore,
+          nextCursor: stopPagination ? undefined : next.nextCursor,
+          hasMore: stopPagination ? false : next.hasMore,
         }));
       } catch (_) {
         if (requestIdRef.current === requestId) {
-          setError(t("base.channelSearch.searchFailed"));
+          const message = t("base.channelSearch.searchFailed");
+          if (cursor) {
+            setPaginationError(message);
+          } else {
+            setError(message);
+          }
         }
       } finally {
         if (requestIdRef.current === requestId) {
           setLoading(false);
           setLoadingMore(false);
+          if (loadingMoreCursorRef.current === cursor) {
+            loadingMoreCursorRef.current = null;
+          }
         }
       }
     },
     [activeTab, channel, dataSource, filters, isComposing, keyword, t]
   );
 
+  const loadNextPage = useCallback(
+    (force = false) => {
+      if (loading || loadingMore || !response.hasMore || !response.nextCursor) {
+        return;
+      }
+      if ((paginationError || autoPaginationPaused) && !force) {
+        return;
+      }
+      void runSearch(response.nextCursor);
+    },
+    [
+      autoPaginationPaused,
+      loading,
+      loadingMore,
+      paginationError,
+      response.hasMore,
+      response.nextCursor,
+      runSearch,
+    ]
+  );
+
+  const maybeLoadNextPageFromScroll = useCallback(
+    (content: HTMLElement) => {
+      if (isNearChannelSearchScrollBottom(content)) {
+        loadNextPage();
+      }
+    },
+    [loadNextPage]
+  );
+
+  const handleContentScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const content = event.currentTarget;
+      if (typeof window.requestAnimationFrame !== "function") {
+        maybeLoadNextPageFromScroll(content);
+        return;
+      }
+      if (scrollFrameRef.current !== null) {
+        return;
+      }
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        maybeLoadNextPageFromScroll(content);
+      });
+    },
+    [maybeLoadNextPageFromScroll]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (
+        scrollFrameRef.current !== null &&
+        typeof window.cancelAnimationFrame === "function"
+      ) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (isComposing) return;
     requestIdRef.current += 1;
-    setQueryStarted(true);
+    loadingMoreCursorRef.current = null;
     setResponse({ items: [], hasMore: false });
-    setLoading(true);
     setLoadingMore(false);
     setError(null);
+    setPaginationError(null);
+    setAutoPaginationPaused(false);
+
+    // Keep the initial prompt until an all/message search has a keyword or a
+    // real filter. Media/file tabs can browse immediately.
+    if (!canSearch) {
+      setQueryStarted(false);
+      setLoading(false);
+      return;
+    }
+
+    setQueryStarted(true);
+    setLoading(true);
 
     const timer = window.setTimeout(() => {
       void runSearch();
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [isComposing, runSearch]);
+  }, [canSearch, isComposing, runSearch]);
+
+  // User scrolls and this first-screen top-up effect share the same load guard.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    maybeLoadNextPageFromScroll(content);
+  }, [activeTab, maybeLoadNextPageFromScroll, response.items.length]);
 
   const handleLocate = useCallback(
     (item: ChannelSearchItem) => {
@@ -1345,14 +1633,20 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
         </div>
       );
     }
-    if (error) {
+    if (error && response.items.length === 0) {
       return <div className="wk-channel-search-error">{error}</div>;
     }
     if (!queryStarted || response.items.length === 0) {
       return <SearchEmpty queryStarted={queryStarted} />;
     }
     if (activeTab === "media") {
-      return <MediaResultGrid items={response.items} onLocate={handleLocate} />;
+      return (
+        <MediaResultGrid
+          items={response.items}
+          onLocate={handleLocate}
+          onPreviewMedia={onPreviewMedia}
+        />
+      );
     }
     if (activeTab === "file") {
       return (
@@ -1381,6 +1675,7 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
             keyword={keyword}
             getSender={getSender}
             onLocate={handleLocate}
+            onPreviewMedia={onPreviewMedia}
           />
         ))}
       </div>
@@ -1401,17 +1696,35 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
             placeholder={t("base.channelSearch.placeholder")}
             autoFocus
             onCompositionStart={() => {
+              isComposingRef.current = true;
               setIsComposing(true);
             }}
             onCompositionEnd={(event) => {
+              isComposingRef.current = false;
               setIsComposing(false);
-              setKeyword(event.currentTarget.value);
+              updateKeyword(event.currentTarget.value);
             }}
             onChange={(event) => {
-              setKeyword(event.currentTarget.value);
+              const nextKeyword = event.currentTarget.value;
+              if (isComposingRef.current) {
+                setKeyword(nextKeyword);
+                return;
+              }
+              updateKeyword(nextKeyword);
             }}
           />
         </div>
+        {keywordAtLimit && (
+          <div
+            className="wk-channel-search-keyword-limit"
+            role="status"
+            aria-live="polite"
+          >
+            {t("base.channelSearch.keywordLimitHint", {
+              values: { count: CHANNEL_SEARCH_KEYWORD_MAX_RUNES },
+            })}
+          </div>
+        )}
         <IconClick
           size="sm"
           icon={<X size={18} />}
@@ -1453,25 +1766,40 @@ const ChannelSearchPanel: React.FC<ChannelSearchPanelProps> = ({
         </div>
       </div>
 
-      <div className="wk-channel-search-content">
+      <div
+        className="wk-channel-search-content"
+        ref={contentRef}
+        onScroll={handleContentScroll}
+      >
         {activeTab === "media" && (
           <div className="wk-channel-search-media-tip">
             {t("base.channelSearch.mediaKeywordTip")}
           </div>
         )}
         {renderResults()}
-        {response.hasMore && !loading && (
-          <div className="wk-channel-search-load-more">
-            <WKButton
-              size="sm"
-              variant="secondary"
-              loading={loadingMore}
-              onClick={() => void runSearch(response.nextCursor)}
-            >
-              {t("base.channelSearch.loadMore")}
-            </WKButton>
+        {loadingMore && (
+          <div className="wk-channel-search-load-more" role="status">
+            {t("base.channelSearch.loading")}
           </div>
         )}
+        {paginationError && response.items.length > 0 && (
+          <div className="wk-channel-search-load-more wk-channel-search-load-more--error">
+            <span>{paginationError}</span>
+            <button type="button" onClick={() => loadNextPage(true)}>
+              {t("base.channelSearch.loadMore")}
+            </button>
+          </div>
+        )}
+        {autoPaginationPaused &&
+          !paginationError &&
+          !loadingMore &&
+          response.hasMore && (
+            <div className="wk-channel-search-load-more">
+              <button type="button" onClick={() => loadNextPage(true)}>
+                {t("base.channelSearch.loadMore")}
+              </button>
+            </div>
+          )}
       </div>
     </div>
   );

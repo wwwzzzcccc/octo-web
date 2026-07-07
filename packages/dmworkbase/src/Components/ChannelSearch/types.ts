@@ -1,3 +1,5 @@
+import type { RichTextBlock } from "../../Messages/RichText/RichTextContent";
+
 export type ChannelSearchTab = "all" | "message" | "media" | "file";
 
 export type ChannelSearchItemKind =
@@ -37,7 +39,6 @@ export interface ChannelSearchFileInfo {
   name: string;
   size: number;
   extension?: string;
-  iconUrl?: string;
   url?: string;
   downloadUrl?: string;
   previewUrl?: string | null;
@@ -45,6 +46,9 @@ export interface ChannelSearchFileInfo {
 
 export interface ChannelSearchMediaInfo {
   name?: string;
+  url?: string;
+  downloadUrl?: string;
+  previewUrl?: string | null;
   thumbUrl?: string;
   inlineThumbUrl?: string;
   duration?: number;
@@ -54,10 +58,39 @@ export interface ChannelSearchMediaInfo {
   tone: "warm" | "cool" | "green" | "purple" | "orange";
 }
 
+export interface ChannelSearchForwardInnerMessage {
+  messageId: string;
+  type: number;
+  text: string;
+  senderUid?: string;
+  senderName?: string;
+  timestamp?: number;
+}
+
 export interface ChannelSearchForwardInfo {
   title: string;
   snippets: string[];
+  innerMessages?: ChannelSearchForwardInnerMessage[];
   childCount?: number;
+}
+
+export interface ChannelSearchRichTextMentionEntity {
+  uid: string;
+  offset: number;
+  length: number;
+}
+
+export interface ChannelSearchRichTextMention {
+  entities?: ChannelSearchRichTextMentionEntity[];
+  all?: number;
+  humans?: number;
+  ais?: number;
+}
+
+export interface ChannelSearchRichTextInfo {
+  content: RichTextBlock[];
+  plain?: string;
+  mention?: ChannelSearchRichTextMention;
 }
 
 export interface ChannelSearchItem {
@@ -75,6 +108,7 @@ export interface ChannelSearchItem {
   file?: ChannelSearchFileInfo;
   media?: ChannelSearchMediaInfo;
   forward?: ChannelSearchForwardInfo;
+  richText?: ChannelSearchRichTextInfo;
 }
 
 export interface ChannelSearchResponse {
