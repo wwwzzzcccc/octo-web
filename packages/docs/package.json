@@ -73,6 +73,7 @@
     "docx": "^9.7.1",
     "dompurify": "3.4.2",
     "mathjax-full": "^3.2.2",
+    "pdfjs-dist": "3.11.174",
     "xml-js": "^1.6.11"
   },
   "peerDependencies": {

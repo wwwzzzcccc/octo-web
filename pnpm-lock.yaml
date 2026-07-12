@@ -980,6 +980,9 @@ importers:
       mathlive:
         specifier: ^0.104.0
         version: 0.104.2
+      pdfjs-dist:
+        specifier: 3.11.174
+        version: 3.11.174(encoding@0.1.13)
       xlsx-js-style:
         specifier: ^1.2.0
         version: 1.2.0
